@@ -1316,6 +1316,17 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
   List<AvailabilitySlot> _generateSlotsList(String orgId, String staffUserId) {
     final slots = <AvailabilitySlot>[];
     
+    // Deriva la categoria dall'esame selezionato se non si usa la macrocategoria
+    String? categoryToUse = _selectedCategory;
+    if (!_useCategoryInsteadOfExam && _selectedExamId != null) {
+      final selectedExam = widget.exams.firstWhere(
+        (e) => e.id == _selectedExamId,
+        orElse: () => widget.exams.first,
+      );
+      categoryToUse = selectedExam.category.name.toUpperCase();
+      _debugLog.info('RecurringCreator', '📋 Categoria derivata da esame: $categoryToUse');
+    }
+    
     for (int week = 0; week < _weeks; week++) {
       final weekStart = _startDate.add(Duration(days: 7 * week));
       
@@ -1334,7 +1345,7 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
               id: '',
               organizationId: orgId,
               examId: _useCategoryInsteadOfExam ? null : _selectedExamId,
-              examCategory: _useCategoryInsteadOfExam ? _selectedCategory : null,
+              examCategory: categoryToUse, // Sempre valorizzata!
               staffUserId: staffUserId,
               startTime: cursor,
               endTime: cursor.add(Duration(minutes: _slotDuration)),
@@ -1349,7 +1360,7 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
             id: '',
             organizationId: orgId,
             examId: _useCategoryInsteadOfExam ? null : _selectedExamId,
-            examCategory: _useCategoryInsteadOfExam ? _selectedCategory : null,
+            examCategory: categoryToUse, // Sempre valorizzata!
             staffUserId: staffUserId,
             startTime: startDateTime,
             endTime: endDateTime,
@@ -1539,10 +1550,19 @@ class _SingleAvailabilityCreatorState extends State<SingleAvailabilityCreator> {
       final startDateTime = DateTime(_date.year, _date.month, _date.day, _startTime.hour, _startTime.minute);
       final endDateTime = DateTime(_date.year, _date.month, _date.day, _endTime.hour, _endTime.minute);
       
+      // Deriva la categoria dall'esame selezionato
+      final selectedExam = widget.exams.firstWhere(
+        (e) => e.id == _selectedExamId,
+        orElse: () => widget.exams.first,
+      );
+      final examCategory = selectedExam.category.name.toUpperCase();
+      DebugLogService().info('SingleCreator', '📋 Categoria derivata: $examCategory');
+      
       final slot = AvailabilitySlot(
         id: '',
         organizationId: orgId,
         examId: _selectedExamId!,
+        examCategory: examCategory, // Sempre valorizzata!
         staffUserId: profile.id,
         startTime: startDateTime,
         endTime: endDateTime,

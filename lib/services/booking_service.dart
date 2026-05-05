@@ -546,7 +546,9 @@ class BookingService {
   /// Ottiene le prenotazioni per un'organizzazione (tutte le sue strutture)
   Future<List<Booking>> getBookingsForOrganization(String organizationId, {BookingStatus? status}) async {
     try {
+      debugPrint('[BookingService] ═══════════════════════════════════════════════════');
       debugPrint('[BookingService] 🔍 Querying bookings for organization: $organizationId');
+      debugPrint('[BookingService] 🔍 Status filter: ${status?.name ?? "ALL"}');
       
       // Optimized query with JOINs - Organizzazione = Struttura
       var query = SupabaseConfig.client
@@ -598,6 +600,7 @@ class BookingService {
       }
       
       debugPrint('[BookingService] ✅ Successfully parsed ${bookings.length} bookings for org $organizationId');
+      debugPrint('[BookingService] ═══════════════════════════════════════════════════');
       return bookings;
     } catch (e, stack) {
       debugPrint('[BookingService] ❌ Failed to load organization bookings: $e');

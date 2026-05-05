@@ -102,6 +102,14 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
         user = await userService.updateUser(updated);
       }
 
+      debugPrint('[BookingConfirmation] 📋 Creazione prenotazione:');
+      debugPrint('[BookingConfirmation]   - userId: ${user.id}');
+      debugPrint('[BookingConfirmation]   - organizationId: ${widget.organizationId}');
+      debugPrint('[BookingConfirmation]   - organizationName: ${widget.organizationName}');
+      debugPrint('[BookingConfirmation]   - examTypeId: ${widget.exam.id}');
+      debugPrint('[BookingConfirmation]   - examName: ${widget.exam.name}');
+      debugPrint('[BookingConfirmation]   - slotId: ${widget.slotId ?? "N/A"}');
+      
       final createdBooking = await bookingService.createBookingWithLock(
         userId: user.id,
         organizationId: widget.organizationId,
@@ -113,6 +121,9 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
         price: widget.price ?? 80.0,
         notes: null,
       );
+      
+      debugPrint('[BookingConfirmation] ✅ Prenotazione creata con ID: ${createdBooking.id}');
+      debugPrint('[BookingConfirmation] ✅ Organization ID salvato: ${createdBooking.organizationId}');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

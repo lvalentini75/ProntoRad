@@ -69,6 +69,10 @@ class _BookingsAdminScreenState extends State<BookingsAdminScreen> {
         organizations = results[1] as List<Organization>;
         debugPrint('[BookingsAdmin] ✅ Loaded ${bookings.length} bookings for org_admin');
         debugPrint('[BookingsAdmin] ✅ Organization: ${organizations.isNotEmpty ? organizations.first.name : 'NONE'}');
+        // Log dettagliato di ogni prenotazione per debug
+        for (final b in bookings) {
+          debugPrint('[BookingsAdmin]   - Booking ${b.id.substring(0, 8)}: org=${b.organizationId}, exam=${b.examType?.name ?? b.examTypeId}, patient=${b.user?.fullName ?? "N/A"}, status=${b.status.name}');
+        }
       } else {
         // Super admin sees all bookings
         debugPrint('[BookingsAdmin] 📋 Loading ALL bookings (super_admin)');
@@ -364,62 +368,258 @@ class _BookingsAdminScreenState extends State<BookingsAdminScreen> {
   }
 
   void _showBookingDetails(Booking booking) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Prenotazione #${booking.id.substring(0, 8)}'),
-        content: SingleChildScrollView(
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 700),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1A1F26) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('👤 Paziente', style: context.textStyles.labelMedium?.semiBold),
-              const SizedBox(height: 4),
-              Text(_getPatientName(booking)),
-              Text('📧 ${_getPatientEmail(booking)}'),
-              Text('📞 ${_getPatientPhone(booking)}'),
-              const Divider(height: 24),
-              Text('🏥 Struttura', style: context.textStyles.labelMedium?.semiBold),
-              const SizedBox(height: 4),
-              Text('${booking.organization?.name ?? 'N/A'}'),
-              if (booking.organization?.city != null)
-                Text('📍 ${booking.organization?.city}, ${booking.organization?.province}'),
-              const Divider(height: 24),
-              Text('📋 Esame', style: context.textStyles.labelMedium?.semiBold),
-              const SizedBox(height: 4),
-              Text('${booking.examType?.name ?? 'N/A'}'),
-              Text('💶 ${booking.price.toStringAsFixed(2)} €'),
-              const Divider(height: 24),
-              Text('📅 Data e Ora', style: context.textStyles.labelMedium?.semiBold),
-              const SizedBox(height: 4),
-              Text('${booking.bookingDate.day.toString().padLeft(2, '0')}/${booking.bookingDate.month.toString().padLeft(2, '0')}/${booking.bookingDate.year} alle ${booking.bookingTime.hour.toString().padLeft(2, '0')}:${booking.bookingTime.minute.toString().padLeft(2, '0')}'),
-              const Divider(height: 24),
-              Text('📊 Stato', style: context.textStyles.labelMedium?.semiBold),
-              const SizedBox(height: 8),
-              _StatusBadge(status: booking.status.name),
-              const SizedBox(height: 8),
-              _UrgencyBadge(urgency: booking.urgencyLevel),
-              if (booking.notes?.isNotEmpty ?? false) ...[
-                const Divider(height: 24),
-                Text('📝 Note paziente', style: context.textStyles.labelMedium?.semiBold),
-                const SizedBox(height: 4),
-                Text(booking.notes!),
-              ],
-              if (booking.operatorNotes?.isNotEmpty ?? false) ...[
-                const Divider(height: 24),
-                Text('💬 Note operatore', style: context.textStyles.labelMedium?.semiBold),
-                const SizedBox(height: 4),
-                Text(booking.operatorNotes!),
-              ],
+              // Header
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.event_note_rounded, color: Colors.white, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Dettaglio Prenotazione',
+                            style: context.textStyles.titleLarge?.bold.copyWith(color: Colors.white)),
+                          const SizedBox(height: 4),
+                          Text('#${booking.id.substring(0, 8)}',
+                            style: context.textStyles.bodyMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontFamily: 'monospace',
+                            )),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Content
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Status badges
+                      Row(
+                        children: [
+                          _StatusBadge(status: booking.status.name),
+                          const SizedBox(width: 12),
+                          _UrgencyBadge(urgency: booking.urgencyLevel),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      // Paziente Section
+                      _DetailSection(
+                        icon: Icons.person_rounded,
+                        iconColor: const Color(0xFF6366F1),
+                        title: 'Paziente',
+                        children: [
+                          _DetailRow(
+                            icon: Icons.badge_outlined,
+                            label: 'Nome',
+                            value: _getPatientName(booking),
+                          ),
+                          _DetailRow(
+                            icon: Icons.email_outlined,
+                            label: 'Email',
+                            value: _getPatientEmail(booking),
+                          ),
+                          _DetailRow(
+                            icon: Icons.phone_outlined,
+                            label: 'Telefono',
+                            value: _getPatientPhone(booking),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Struttura Section
+                      _DetailSection(
+                        icon: Icons.local_hospital_rounded,
+                        iconColor: const Color(0xFF10B981),
+                        title: 'Struttura',
+                        children: [
+                          _DetailRow(
+                            icon: Icons.business_outlined,
+                            label: 'Nome',
+                            value: booking.organization?.name ?? 'N/A',
+                          ),
+                          if (booking.organization?.city != null)
+                            _DetailRow(
+                              icon: Icons.location_on_outlined,
+                              label: 'Località',
+                              value: '${booking.organization?.city}, ${booking.organization?.province ?? ''}',
+                            ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Esame Section
+                      _DetailSection(
+                        icon: Icons.medical_services_rounded,
+                        iconColor: const Color(0xFFF59E0B),
+                        title: 'Esame',
+                        children: [
+                          _DetailRow(
+                            icon: Icons.description_outlined,
+                            label: 'Tipo',
+                            value: booking.examType?.name ?? 'N/A',
+                          ),
+                          _DetailRow(
+                            icon: Icons.euro_outlined,
+                            label: 'Prezzo',
+                            value: '${booking.price.toStringAsFixed(2)} €',
+                            valueStyle: context.textStyles.bodyLarge?.semiBold.withColor(const Color(0xFF10B981)),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Data e Ora Section
+                      _DetailSection(
+                        icon: Icons.calendar_month_rounded,
+                        iconColor: const Color(0xFFEC4899),
+                        title: 'Data e Ora',
+                        children: [
+                          _DetailRow(
+                            icon: Icons.event_outlined,
+                            label: 'Data',
+                            value: '${booking.bookingDate.day.toString().padLeft(2, '0')}/${booking.bookingDate.month.toString().padLeft(2, '0')}/${booking.bookingDate.year}',
+                          ),
+                          _DetailRow(
+                            icon: Icons.access_time_outlined,
+                            label: 'Ora',
+                            value: '${booking.bookingTime.hour.toString().padLeft(2, '0')}:${booking.bookingTime.minute.toString().padLeft(2, '0')}',
+                          ),
+                        ],
+                      ),
+                      
+                      // Note paziente
+                      if (booking.notes?.isNotEmpty ?? false) ...[
+                        const SizedBox(height: 20),
+                        _DetailSection(
+                          icon: Icons.note_alt_rounded,
+                          iconColor: const Color(0xFF8B5CF6),
+                          title: 'Note Paziente',
+                          children: [
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF2A3340) : const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF3A4350) : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Text(booking.notes!,
+                                style: context.textStyles.bodyMedium),
+                            ),
+                          ],
+                        ),
+                      ],
+                      
+                      // Note operatore
+                      if (booking.operatorNotes?.isNotEmpty ?? false) ...[
+                        const SizedBox(height: 20),
+                        _DetailSection(
+                          icon: Icons.support_agent_rounded,
+                          iconColor: const Color(0xFF06B6D4),
+                          title: 'Note Operatore',
+                          children: [
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF2A3340) : const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF3A4350) : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Text(booking.operatorNotes!,
+                                style: context.textStyles.bodyMedium),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Footer
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF151A21) : const Color(0xFFF8FAFC),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      label: const Text('Chiudi'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Chiudi'),
-          ),
-        ],
       ),
     );
   }
@@ -558,6 +758,114 @@ class _ConfirmSwitchState extends State<_ConfirmSwitch> {
             widget.onConfirm();
           }
         },
+      ),
+    );
+  }
+}
+
+/// Sezione del dialog di dettaglio
+class _DetailSection extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final List<Widget> children;
+
+  const _DetailSection({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E242C) : const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? const Color(0xFF2A3340) : const Color(0xFFE8EDF2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Text(title,
+                  style: context.textStyles.titleSmall?.semiBold.withColor(iconColor)),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Riga di dettaglio con icona e valore
+class _DetailRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final TextStyle? valueStyle;
+
+  const _DetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.valueStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 80,
+            child: Text(label,
+              style: context.textStyles.bodySmall?.withColor(colorScheme.onSurfaceVariant)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(value,
+              style: valueStyle ?? context.textStyles.bodyMedium?.semiBold),
+          ),
+        ],
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:xraynow/auth/supabase_auth_manager.dart';
+import 'package:xraynow/nav.dart';
 import 'package:xraynow/models/availability_slot.dart';
 import 'package:xraynow/models/booking.dart';
 import 'package:xraynow/models/exam_type.dart';
@@ -263,7 +264,7 @@ class _CreateBookingAdminScreenState extends State<CreateBookingAdminScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('✅ Prenotazione creata con successo')),
         );
-        context.pop();
+        context.go(AppRoutes.dashboardBookings);
       }
     } catch (e) {
       _debugLog.error('CreateBookingAdmin', 'Error creating booking', error: e);
@@ -1358,7 +1359,7 @@ class _CreateBookingAdminScreenState extends State<CreateBookingAdminScreen> {
       children: [
         Expanded(
           child: OutlinedButton(
-            onPressed: () => context.pop(),
+            onPressed: () => context.go(AppRoutes.dashboardBookings),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
               side: const BorderSide(color: Colors.grey),

@@ -74,19 +74,15 @@ class AppRouter {
         }
       }
 
-      // App mobile: se su /login, vai direttamente alla home
-      if (loc == '/login') {
-        // Se autenticato e admin, vai a dashboard
-        if (isAuthenticated) {
-          final profile = SupabaseAuthManager.instance.cachedProfile;
-          final role = profile?.role ?? 'end_user';
-          if (role == 'super_admin' || role == 'org_admin') {
-            debugPrint('[Router] ✅ Admin autenticato, vai a dashboard');
-            return AppRoutes.dashboard;
-          }
+      // App mobile: se già autenticato e su /login, redirect appropriato
+      if (loc == '/login' && isAuthenticated) {
+        final profile = SupabaseAuthManager.instance.cachedProfile;
+        final role = profile?.role ?? 'end_user';
+        if (role == 'super_admin' || role == 'org_admin') {
+          debugPrint('[Router] ✅ Admin già autenticato, vai a dashboard');
+          return AppRoutes.dashboard;
         }
-        // Altrimenti vai alla home (app mobile non richiede autenticazione)
-        debugPrint('[Router] ✅ Vai alla home (app mobile)');
+        debugPrint('[Router] ✅ Utente già autenticato, vai alla home');
         return AppRoutes.home;
       }
 
