@@ -35,6 +35,9 @@ serve(async (req) => {
     const phone_number = (body.phone_number ?? "").toString();
     const organization_id = typeof body.organization_id === "string" && body.organization_id.length > 0 ? body.organization_id : null;
     const role = (body.role ?? "end_user").toString();
+    const fiscal_code = body.fiscal_code ? body.fiscal_code.toString() : null;
+    const date_of_birth = body.date_of_birth ? body.date_of_birth.toString() : null;
+    const auth_user_id = body.auth_user_id ? body.auth_user_id.toString() : null;
 
     if (!email) {
       return new Response(JSON.stringify({ error: "email is required" }), { status: 400, headers: { ...CORS_HEADERS, "content-type": "application/json" } });
@@ -70,6 +73,9 @@ serve(async (req) => {
       if (phone_number) patch.phone_number = phone_number;
       if (organization_id) patch.organization_id = organization_id;
       if (role) patch.role = role;
+      if (fiscal_code !== null) patch.fiscal_code = fiscal_code;
+      if (date_of_birth !== null) patch.date_of_birth = date_of_birth;
+      if (auth_user_id) patch.auth_user_id = auth_user_id;
 
       const { data, error } = await supabase.from("users").update(patch).eq("id", existing.id).select().single();
       if (error) {
@@ -90,6 +96,9 @@ serve(async (req) => {
     };
     if (id) row.id = id;
     if (organization_id) row.organization_id = organization_id;
+    if (fiscal_code) row.fiscal_code = fiscal_code;
+    if (date_of_birth) row.date_of_birth = date_of_birth;
+    if (auth_user_id) row.auth_user_id = auth_user_id;
 
     const { data, error } = await supabase.from("users").insert(row).select().single();
     if (error) {

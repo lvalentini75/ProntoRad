@@ -5,6 +5,7 @@ import 'package:xraynow/models/user.dart';
 import 'package:xraynow/services/user_service.dart';
 import 'package:xraynow/services/notification_service.dart';
 import 'package:xraynow/supabase/supabase_config.dart';
+import 'package:xraynow/auth/supabase_auth_manager.dart';
 import 'package:xraynow/theme.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -30,18 +31,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadUser() async {
     setState(() => _isLoading = true);
     try {
-      final user = await _userService.getCurrentUser();
+      // Prima prova a usare il profilo già caricato dall'AuthManager
+      User? user = SupabaseAuthManager.instance.cachedProfile;
+      
+      // Se non c'è cache, prova a ricaricare
+      if (user == null) {
+        debugPrint('[ProfileScreen] Cache vuota, provo a ricaricare profilo...');
+        user = await _userService.getCurrentUser();
+      }
+      
       int unreadCount = 0;
       if (user != null) {
+        debugPrint('[ProfileScreen] ✅ Profilo trovato: ${user.email}');
         unreadCount = await _notificationService.getUnreadCount(user.id);
+      } else {
+        debugPrint('[ProfileScreen] ❌ Nessun profilo trovato');
       }
+      
       setState(() {
         _user = user;
         _unreadNotifications = unreadCount;
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error loading user: $e');
+      debugPrint('[ProfileScreen] ❌ Errore: $e');
       setState(() => _isLoading = false);
     }
   }

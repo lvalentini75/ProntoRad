@@ -120,6 +120,13 @@ class UserService {
         user.toJson(),
         filters: {'id': user.id},
       );
+      // Se l'update non restituisce righe (RLS blocca), usa edge function
+      if (result.isEmpty) {
+        debugPrint('[UserService] Update returned empty result (RLS?), using edge function...');
+        final updated = await _ensurePatientViaEdge(user);
+        await AuditLogService.log(action: 'update', table: 'users', recordId: updated.id, changes: updated.toJson());
+        return updated;
+      }
       final updated = User.fromJson(result.first);
       await AuditLogService.log(action: 'update', table: 'users', recordId: updated.id, changes: updated.toJson());
       return updated;
@@ -134,6 +141,7 @@ class UserService {
           msg.contains('policy for relation "users"') ||
           msg.contains('policy for relation \"users\"') ||
           msg.contains('infinite recursion') ||
+          msg.contains('no element') ||
           msg.contains('rls');
       if (isRls) {
         final updated = await _ensurePatientViaEdge(user);
@@ -218,6 +226,9 @@ class UserService {
         'phone_number': user.phoneNumber,
         if (user.organizationId != null) 'organization_id': user.organizationId,
         'role': user.role ?? 'end_user',
+        if (user.fiscalCode != null && user.fiscalCode!.isNotEmpty) 'fiscal_code': user.fiscalCode,
+        if (user.dateOfBirth != null) 'date_of_birth': user.dateOfBirth!.toIso8601String().split('T').first,
+        if (user.authUserId != null) 'auth_user_id': user.authUserId,
       };
       // Prefer user JWT if present; otherwise use anon key so guests can book
       final userToken = await SupabaseConfig.tryGetAccessToken();

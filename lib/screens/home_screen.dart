@@ -28,7 +28,7 @@ class HomeScreen extends StatelessWidget {
                     // EOC Logo
                     Image.asset(
                       'assets/images/logo_EOC.png',
-                      height: 120,
+                      height: 160,
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 20),
