@@ -1,0 +1,3 @@
+Logo placeholder - Use the PRONTORAD logo from the design files
+The app will use Image.asset('assets/logo.png') to display the logo.
+Please replace this file with the actual logo.png file.
