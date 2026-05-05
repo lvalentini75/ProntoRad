@@ -14,6 +14,7 @@ import 'package:xraynow/screens/booking_status_screen.dart';
 import 'package:xraynow/screens/bookings_screen.dart';
 import 'package:xraynow/screens/profile_screen.dart';
 import 'package:xraynow/screens/support_screen.dart';
+import 'package:xraynow/screens/notifications_screen.dart';
 import 'package:xraynow/models/exam_type.dart';
 import 'package:xraynow/models/booking.dart';
 import 'package:xraynow/supabase/supabase_config.dart';
@@ -32,8 +33,12 @@ import 'package:xraynow/screens/web/exam_offerings_screen.dart';
 import 'package:xraynow/screens/web/tariffs_management_screen.dart';
 import 'package:xraynow/screens/web/availability_management_screen.dart';
 import 'package:xraynow/screens/web/create_booking_admin_screen.dart';
+import 'package:xraynow/screens/web/exam_packages_screen.dart';
+import 'package:xraynow/screens/web/exam_compatibility_screen.dart';
 import 'package:xraynow/screens/logs_viewer_screen.dart';
 import 'package:xraynow/screens/debug_auth_test_screen.dart';
+import 'package:xraynow/screens/package_selection_screen.dart';
+import 'package:xraynow/models/exam_package.dart';
 import 'package:xraynow/auth/supabase_auth_manager.dart';
 import 'package:xraynow/auth/auth_state_notifier.dart';
 
@@ -182,6 +187,11 @@ class AppRouter {
             pageBuilder: (context, state) => const NoTransitionPage(child: SupportScreen()),
           ),
           GoRoute(
+            path: AppRoutes.notifications,
+            name: 'notifications',
+            pageBuilder: (context, state) => const NoTransitionPage(child: NotificationsScreen()),
+          ),
+          GoRoute(
             path: AppRoutes.logs,
             name: 'logs',
             builder: (context, state) => const LogsViewerScreen(),
@@ -198,12 +208,42 @@ class AppRouter {
             },
           ),
           GoRoute(
+            path: AppRoutes.packages,
+            name: 'packages',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: PackageSelectionScreen(),
+            ),
+          ),
+          GoRoute(
+            path: AppRoutes.locationSelectionPackage,
+            name: 'location-selection-package',
+            pageBuilder: (context, state) {
+              final package = state.extra as ExamPackage;
+              return NoTransitionPage(
+                child: LocationSelectionScreen(examPackage: package),
+              );
+            },
+          ),
+          GoRoute(
             path: AppRoutes.locationSelection,
             name: 'location-selection',
             pageBuilder: (context, state) {
-              final exam = state.extra as ExamType;
+              final extra = state.extra;
+              // Supporta sia ExamType che Map per flessibilità
+              if (extra is ExamType) {
+                return NoTransitionPage(
+                  child: LocationSelectionScreen(exam: extra),
+                );
+              } else if (extra is Map<String, dynamic>) {
+                return NoTransitionPage(
+                  child: LocationSelectionScreen(
+                    exam: extra['exam'] as ExamType?,
+                    examPackage: extra['examPackage'] as ExamPackage?,
+                  ),
+                );
+              }
               return NoTransitionPage(
-                child: LocationSelectionScreen(exam: exam),
+                child: LocationSelectionScreen(exam: extra as ExamType),
               );
             },
           ),
@@ -214,7 +254,8 @@ class AppRouter {
               final params = state.extra as Map<String, dynamic>;
               return NoTransitionPage(
                 child: FacilityListScreen(
-                  exam: params['exam'] as ExamType,
+                  exam: params['exam'] as ExamType?,
+                  examPackage: params['examPackage'] as ExamPackage?,
                   region: params['region'] as String,
                   province: params['province'] as String,
                   city: params['city'] as String,
@@ -231,7 +272,8 @@ class AppRouter {
               final params = state.extra as Map<String, dynamic>;
               return NoTransitionPage(
                 child: BookingConfirmationScreen(
-                  exam: params['exam'] as ExamType,
+                  exam: params['exam'] as ExamType?,
+                  examPackage: params['examPackage'] as ExamPackage?,
                   organizationId: params['organizationId'] as String,
                   organizationName: params['organizationName'] as String,
                   date: params['date'] as DateTime,
@@ -361,6 +403,20 @@ class AppRouter {
             ),
           ),
           GoRoute(
+            path: AppRoutes.dashboardExamPackages,
+            name: 'dashboard-exam-packages',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: ExamPackagesScreen(),
+            ),
+          ),
+          GoRoute(
+            path: AppRoutes.dashboardExamCompatibility,
+            name: 'dashboard-exam-compatibility',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: ExamCompatibilityScreen(),
+            ),
+          ),
+          GoRoute(
             path: AppRoutes.dashboardSettings,
             name: 'dashboard-settings',
             pageBuilder: (context, state) {
@@ -391,13 +447,16 @@ class AppRoutes {
   static const String signup = '/signup';
   static const String home = '/home';
   static const String examSelection = '/exam-selection';
+  static const String packages = '/packages';
   static const String locationSelection = '/location-selection';
+  static const String locationSelectionPackage = '/location-selection-package';
   static const String facilityList = '/facility-list';
   static const String bookingConfirmation = '/booking-confirmation';
   static const String bookingStatus = '/booking-status';
   static const String bookings = '/bookings';
   static const String profile = '/profile';
   static const String support = '/support';
+  static const String notifications = '/notifications';
   
   // Web dashboard routes
   static const String dashboard = '/dashboard';
@@ -415,6 +474,8 @@ class AppRoutes {
   static const String dashboardBookingsConfirmed = '/dashboard/bookings/confirmed';
   static const String dashboardBookingsCreate = '/dashboard/bookings/create';
   static const String dashboardAudit = '/dashboard/audit';
+  static const String dashboardExamPackages = '/dashboard/exam-packages';
+  static const String dashboardExamCompatibility = '/dashboard/exam-compatibility';
   static const String dashboardSettings = '/dashboard/settings';
   
   // Debug routes

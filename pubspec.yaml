@@ -37,6 +37,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    - assets/images/
 
 flutter_launcher_icons:
   android: true

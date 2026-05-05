@@ -11,11 +11,15 @@ import 'package:xraynow/services/user_service.dart';
 import 'package:xraynow/supabase/supabase_config.dart';
 import 'package:xraynow/services/audit_log_service.dart';
 import 'package:xraynow/services/debug_log_service.dart';
+import 'package:xraynow/services/exam_package_service.dart';
+import 'package:xraynow/services/notification_service.dart';
+import 'package:xraynow/models/exam_package.dart';
 
 class BookingService {
   final ExamService _examService = ExamService();
   final OrganizationService _organizationService = OrganizationService();
   final UserService _userService = UserService();
+  final NotificationService _notificationService = NotificationService();
   
   /// Get all bookings with related data using optimized single query with JOINs
   /// Much faster than N+1 queries - loads everything in one database roundtrip
@@ -212,10 +216,12 @@ class BookingService {
           debugPrint('[BookingService] Fallback ExamType loaded: ${booking.examType?.name}');
         } catch (e) {
           debugPrint('[BookingService] Fallback failed to parse exam_type: $e');
-          booking.examType = await _examService.getExamById(booking.examTypeId);
+          if (booking.examTypeId != null) {
+            booking.examType = await _examService.getExamById(booking.examTypeId!);
+          }
         }
-      } else {
-        booking.examType = await _examService.getExamById(booking.examTypeId);
+      } else if (booking.examTypeId != null) {
+        booking.examType = await _examService.getExamById(booking.examTypeId!);
       }
       
       if (data['organizations'] != null) {
@@ -248,7 +254,9 @@ class BookingService {
       final newBooking = Booking.fromJson(result.first);
       
       newBooking.user = await _userService.getUserById(newBooking.userId);
-      newBooking.examType = await _examService.getExamById(newBooking.examTypeId);
+      if (newBooking.examTypeId != null) {
+        newBooking.examType = await _examService.getExamById(newBooking.examTypeId!);
+      }
       // Load organization instead of facility
       if (newBooking.organizationId != null) {
         newBooking.organization = await _organizationService.getOrganizationById(newBooking.organizationId!);
@@ -272,13 +280,16 @@ class BookingService {
   Future<Booking> createBookingWithLock({
     required String userId,
     required String organizationId,
-    required String examTypeId,
+    String? examTypeId,
+    String? packageId,
+    String? parentBookingId,
     required DateTime bookingDate,
     required DateTime bookingTime,
     String? slotId,
     required UrgencyLevel urgency,
     required double price,
     String? notes,
+    double? gfrValue,
   }) async {
     // Validate UUID fields are not empty strings
     if (userId.isEmpty) {
@@ -287,19 +298,21 @@ class BookingService {
     if (organizationId.isEmpty) {
       throw Exception('organizationId non può essere vuoto');
     }
-    if (examTypeId.isEmpty) {
-      throw Exception('examTypeId non può essere vuoto');
+    if ((examTypeId == null || examTypeId.isEmpty) && (packageId == null || packageId.isEmpty)) {
+      throw Exception('examTypeId o packageId deve essere specificato');
     }
     
-    debugPrint('[BookingService] Validazione UUID: userId=$userId, orgId=$organizationId, examId=$examTypeId, slotId=$slotId');
+    debugPrint('[BookingService] Validazione UUID: userId=$userId, orgId=$organizationId, examId=$examTypeId, packageId=$packageId, parentBookingId=$parentBookingId, slotId=$slotId');
     
     // ============ ATTEMPT 1: Direct REST API insert (fastest) ============
     try {
       debugPrint('[BookingService] Creating booking via REST API...');
-      final booking = await _insertViaRestApi(userId, organizationId, examTypeId, bookingDate, bookingTime, slotId, urgency, price, notes);
+      final booking = await _insertViaRestApi(userId, organizationId, examTypeId, packageId, parentBookingId, bookingDate, bookingTime, slotId, urgency, price, notes, gfrValue);
       if (booking != null) {
         booking.user = await _userService.getUserById(booking.userId);
-        booking.examType = await _examService.getExamById(booking.examTypeId);
+        if (booking.examTypeId != null) {
+          booking.examType = await _examService.getExamById(booking.examTypeId!);
+        }
         if (booking.organizationId != null) {
           booking.organization = await _organizationService.getOrganizationById(booking.organizationId!);
         }
@@ -321,13 +334,14 @@ class BookingService {
       debugPrint('[BookingService] 📋 Preparazione bookingData (fallback):');
       debugPrint('  - userId: $userId (length: ${userId.length})');
       debugPrint('  - organizationId: $organizationId (length: ${organizationId.length})');
-      debugPrint('  - examTypeId: $examTypeId (length: ${examTypeId.length})');
+      debugPrint('  - examTypeId: ${examTypeId ?? "NULL"}');
+      debugPrint('  - packageId: ${packageId ?? "NULL"}');
+      debugPrint('  - parentBookingId: ${parentBookingId ?? "NULL"}');
       debugPrint('  - slotId: ${slotId ?? "NULL"} -> cleanSlotId: ${cleanSlotId ?? "NULL"}');
       
       final bookingData = <String, dynamic>{
         'user_id': userId,
         'organization_id': organizationId,
-        'exam_type_id': examTypeId,
         'booking_date': bookingDate.toIso8601String().split('T').first,
         'booking_time': bookingTime.toIso8601String(),
         'urgency_level': urgency.name,
@@ -340,11 +354,23 @@ class BookingService {
       };
       
       // Add optional fields only if they have valid values
+      if (examTypeId != null && examTypeId.isNotEmpty) {
+        bookingData['exam_type_id'] = examTypeId;
+      }
+      if (packageId != null && packageId.isNotEmpty) {
+        bookingData['package_id'] = packageId;
+      }
+      if (parentBookingId != null && parentBookingId.isNotEmpty) {
+        bookingData['parent_booking_id'] = parentBookingId;
+      }
       if (cleanSlotId != null) {
         bookingData['slot_id'] = cleanSlotId;
       }
       if (cleanNotes != null) {
         bookingData['notes'] = cleanNotes;
+      }
+      if (gfrValue != null) {
+        bookingData['gfr_value'] = gfrValue;
       }
       
       debugPrint('[BookingService] 📋 bookingData keys (fallback): ${bookingData.keys.join(", ")}');
@@ -354,7 +380,9 @@ class BookingService {
       
       final booking = Booking.fromJson(result.first);
       booking.user = await _userService.getUserById(booking.userId);
-      booking.examType = await _examService.getExamById(booking.examTypeId);
+      if (booking.examTypeId != null) {
+        booking.examType = await _examService.getExamById(booking.examTypeId!);
+      }
       if (booking.organizationId != null) {
         booking.organization = await _organizationService.getOrganizationById(booking.organizationId!);
       }
@@ -392,13 +420,16 @@ class BookingService {
   Future<Booking?> _insertViaRestApi(
     String userId,
     String organizationId,
-    String examTypeId,
+    String? examTypeId,
+    String? packageId,
+    String? parentBookingId,
     DateTime bookingDate,
     DateTime bookingTime,
     String? slotId,
     UrgencyLevel urgency,
     double price,
     String? notes,
+    double? gfrValue,
   ) async {
     final now = DateTime.now();
     // Convert empty strings to null for UUID fields to avoid PostgreSQL errors
@@ -408,13 +439,14 @@ class BookingService {
     debugPrint('[BookingService] 📋 Preparazione bookingData:');
     debugPrint('  - userId: $userId (length: ${userId.length})');
     debugPrint('  - organizationId: $organizationId (length: ${organizationId.length})');
-    debugPrint('  - examTypeId: $examTypeId (length: ${examTypeId.length})');
+    debugPrint('  - examTypeId: ${examTypeId ?? "NULL"}');
+    debugPrint('  - packageId: ${packageId ?? "NULL"}');
+    debugPrint('  - parentBookingId: ${parentBookingId ?? "NULL"}');
     debugPrint('  - slotId: ${slotId ?? "NULL"} -> cleanSlotId: ${cleanSlotId ?? "NULL"}');
     
     final bookingData = <String, dynamic>{
       'user_id': userId,
       'organization_id': organizationId,
-      'exam_type_id': examTypeId,
       'booking_date': bookingDate.toIso8601String().split('T').first,
       'booking_time': bookingTime.toIso8601String(),
       'urgency_level': urgency.name,
@@ -427,11 +459,23 @@ class BookingService {
     };
     
     // Add optional fields only if they have valid values
+    if (examTypeId != null && examTypeId.isNotEmpty) {
+      bookingData['exam_type_id'] = examTypeId;
+    }
+    if (packageId != null && packageId.isNotEmpty) {
+      bookingData['package_id'] = packageId;
+    }
+    if (parentBookingId != null && parentBookingId.isNotEmpty) {
+      bookingData['parent_booking_id'] = parentBookingId;
+    }
     if (cleanSlotId != null) {
       bookingData['slot_id'] = cleanSlotId;
     }
     if (cleanNotes != null) {
       bookingData['notes'] = cleanNotes;
+    }
+    if (gfrValue != null) {
+      bookingData['gfr_value'] = gfrValue;
     }
     
     debugPrint('[BookingService] 📋 bookingData keys: ${bookingData.keys.join(", ")}');
@@ -487,6 +531,140 @@ class BookingService {
     }
   }
   
+  /// Creates multiple bookings for a package - one booking per exam in the package
+  /// Returns the list of all created bookings (parent + children)
+  Future<List<Booking>> createPackageBookings({
+    required String userId,
+    required String organizationId,
+    required String packageId,
+    required DateTime bookingDate,
+    required DateTime bookingTime,
+    String? slotId,
+    required UrgencyLevel urgency,
+    required double totalPrice,
+    String? notes,
+    double? gfrValue,
+  }) async {
+    debugPrint('[BookingService] 📦 Creating package bookings for packageId: $packageId');
+    
+    // Load the package to get exam IDs
+    final packageService = ExamPackageService();
+    final package = await packageService.getPackageById(packageId);
+    
+    if (package == null) {
+      throw Exception('Pacchetto non trovato: $packageId');
+    }
+    
+    if (package.examIds.isEmpty) {
+      throw Exception('Il pacchetto non contiene esami: ${package.name}');
+    }
+    
+    debugPrint('[BookingService] 📦 Package "${package.name}" contains ${package.examIds.length} exams: ${package.examIds}');
+    
+    // Calculate price per exam (distribute evenly or use package price)
+    final pricePerExam = totalPrice / package.examIds.length;
+    debugPrint('[BookingService] 💰 Price per exam: €$pricePerExam (total: €$totalPrice)');
+    
+    final createdBookings = <Booking>[];
+    String? parentBookingId;
+    
+    // Calculate time increments for sequential exams
+    int timeOffset = 0;
+    final avgDurationMinutes = package.totalDurationMinutes ~/ package.examIds.length;
+    
+    for (int i = 0; i < package.examIds.length; i++) {
+      final examId = package.examIds[i];
+      final isFirst = i == 0;
+      
+      // Calculate booking time with offset for sequential exams
+      final examBookingTime = bookingTime.add(Duration(minutes: timeOffset));
+      
+      debugPrint('[BookingService] 📋 Creating booking ${i + 1}/${package.examIds.length} for examId: $examId');
+      debugPrint('[BookingService]   - Time: $examBookingTime (offset: +$timeOffset min)');
+      debugPrint('[BookingService]   - IsParent: $isFirst, ParentId: ${parentBookingId ?? "N/A"}');
+      
+      try {
+        final booking = await createBookingWithLock(
+          userId: userId,
+          organizationId: organizationId,
+          examTypeId: examId,
+          packageId: packageId,
+          parentBookingId: isFirst ? null : parentBookingId,
+          bookingDate: bookingDate,
+          bookingTime: examBookingTime,
+          slotId: isFirst ? slotId : null, // Only first booking uses the slot
+          urgency: urgency,
+          price: pricePerExam,
+          notes: isFirst 
+              ? (notes ?? 'Pacchetto: ${package.name}') 
+              : 'Parte del pacchetto: ${package.name}',
+          gfrValue: gfrValue, // GFR applies to all TAC exams in the package
+        );
+        
+        createdBookings.add(booking);
+        
+        // Save the first booking's ID as parent for subsequent bookings
+        if (isFirst) {
+          parentBookingId = booking.id;
+          debugPrint('[BookingService] ✅ Parent booking created: $parentBookingId');
+        } else {
+          debugPrint('[BookingService] ✅ Child booking created: ${booking.id}');
+        }
+        
+        // Increment time offset for next exam
+        timeOffset += avgDurationMinutes;
+        
+      } catch (e) {
+        debugPrint('[BookingService] ❌ Failed to create booking for examId $examId: $e');
+        // If we fail after creating some bookings, log the error but continue
+        // In a production app, you might want to rollback all bookings
+        rethrow;
+      }
+    }
+    
+    debugPrint('[BookingService] ✅ Package bookings complete! Created ${createdBookings.length} bookings');
+    return createdBookings;
+  }
+  
+  /// Gets all bookings that belong to the same package (parent + children)
+  Future<List<Booking>> getPackageBookings(String parentBookingId) async {
+    try {
+      final data = await SupabaseConfig.client
+          .from('bookings')
+          .select('''
+            *,
+            users:user_id(*),
+            exam_types:exam_type_id(*),
+            organizations:organization_id(*)
+          ''')
+          .or('id.eq.$parentBookingId,parent_booking_id.eq.$parentBookingId')
+          .order('booking_time', ascending: true);
+      
+      final bookings = <Booking>[];
+      for (final json in (data as List)) {
+        try {
+          final booking = Booking.fromJson(json);
+          if (json['users'] != null) {
+            booking.user = User.fromJson(Map<String, dynamic>.from(json['users']));
+          }
+          if (json['exam_types'] != null) {
+            booking.examType = ExamType.fromJson(Map<String, dynamic>.from(json['exam_types']));
+          }
+          if (json['organizations'] != null) {
+            booking.organization = Organization.fromJson(Map<String, dynamic>.from(json['organizations']));
+          }
+          bookings.add(booking);
+        } catch (e) {
+          debugPrint('[BookingService] Failed to parse package booking: $e');
+        }
+      }
+      
+      return bookings;
+    } catch (e) {
+      debugPrint('[BookingService] Failed to load package bookings: $e');
+      return [];
+    }
+  }
 
   Future<Booking> updateBooking(Booking booking) async {
     try {
@@ -498,7 +676,9 @@ class BookingService {
       
       final updatedBooking = Booking.fromJson(result.first);
       updatedBooking.user = await _userService.getUserById(updatedBooking.userId);
-      updatedBooking.examType = await _examService.getExamById(updatedBooking.examTypeId);
+      if (updatedBooking.examTypeId != null) {
+        updatedBooking.examType = await _examService.getExamById(updatedBooking.examTypeId!);
+      }
       if (updatedBooking.organizationId != null) {
         updatedBooking.organization = await _organizationService.getOrganizationById(updatedBooking.organizationId!);
       }
@@ -519,6 +699,18 @@ class BookingService {
           updatedAt: DateTime.now(),
         );
         await updateBooking(updatedBooking);
+        
+        // Create notification for user
+        try {
+          await _notificationService.createBookingNotification(
+            userId: booking.userId,
+            booking: booking,
+            newStatus: BookingStatus.cancelled,
+          );
+          debugPrint('[BookingService] ✅ Notification created for cancelled booking');
+        } catch (notifError) {
+          debugPrint('[BookingService] ⚠️ Failed to create notification: $notifError');
+        }
       }
     } catch (e) {
       debugPrint('Failed to cancel booking: $e');
@@ -628,7 +820,9 @@ class BookingService {
       
       final booking = Booking.fromJson(data);
       booking.user = await _userService.getUserById(booking.userId);
-      booking.examType = await _examService.getExamById(booking.examTypeId);
+      if (booking.examTypeId != null) {
+        booking.examType = await _examService.getExamById(booking.examTypeId!);
+      }
       if (booking.organizationId != null) {
         booking.organization = await _organizationService.getOrganizationById(booking.organizationId!);
       }
@@ -642,6 +836,20 @@ class BookingService {
           if (notes != null && notes.isNotEmpty) 'operator_notes': notes,
         },
       );
+      
+      // Create notification for user
+      try {
+        await _notificationService.createBookingNotification(
+          userId: booking.userId,
+          booking: booking,
+          newStatus: BookingStatus.confirmed,
+          additionalMessage: notes,
+        );
+        debugPrint('[BookingService] ✅ Notification created for confirmed booking');
+      } catch (notifError) {
+        debugPrint('[BookingService] ⚠️ Failed to create notification: $notifError');
+      }
+      
       return booking;
     } catch (e) {
       debugPrint('Failed to confirm booking: $e');
@@ -668,7 +876,9 @@ class BookingService {
       
       final booking = Booking.fromJson(data);
       booking.user = await _userService.getUserById(booking.userId);
-      booking.examType = await _examService.getExamById(booking.examTypeId);
+      if (booking.examTypeId != null) {
+        booking.examType = await _examService.getExamById(booking.examTypeId!);
+      }
       if (booking.organizationId != null) {
         booking.organization = await _organizationService.getOrganizationById(booking.organizationId!);
       }
@@ -682,6 +892,20 @@ class BookingService {
           'confirmed_by': operatorId,
         },
       );
+      
+      // Create notification for user
+      try {
+        await _notificationService.createBookingNotification(
+          userId: booking.userId,
+          booking: booking,
+          newStatus: BookingStatus.rejected,
+          additionalMessage: reason,
+        );
+        debugPrint('[BookingService] ✅ Notification created for rejected booking');
+      } catch (notifError) {
+        debugPrint('[BookingService] ⚠️ Failed to create notification: $notifError');
+      }
+      
       return booking;
     } catch (e) {
       debugPrint('Failed to reject booking: $e');
@@ -711,7 +935,9 @@ class BookingService {
       final result = <Booking>[];
       for (final b in list) {
         b.user = await _userService.getUserById(b.userId);
-        b.examType = await _examService.getExamById(b.examTypeId);
+        if (b.examTypeId != null) {
+          b.examType = await _examService.getExamById(b.examTypeId!);
+        }
         if (b.organizationId != null) {
           b.organization = await _organizationService.getOrganizationById(b.organizationId!);
         }
@@ -729,6 +955,18 @@ class BookingService {
           );
         } catch (e) {
           debugPrint('Audit bulk confirm failed for ${b.id}: $e');
+        }
+        
+        // Create notification for user
+        try {
+          await _notificationService.createBookingNotification(
+            userId: b.userId,
+            booking: b,
+            newStatus: BookingStatus.confirmed,
+            additionalMessage: notes,
+          );
+        } catch (notifError) {
+          debugPrint('[BookingService] Notification bulk confirm failed for ${b.id}: $notifError');
         }
       }
       return result;
@@ -754,10 +992,25 @@ class BookingService {
       
       final booking = Booking.fromJson(data);
       booking.user = await _userService.getUserById(booking.userId);
-      booking.examType = await _examService.getExamById(booking.examTypeId);
+      if (booking.examTypeId != null) {
+        booking.examType = await _examService.getExamById(booking.examTypeId!);
+      }
       if (booking.organizationId != null) {
         booking.organization = await _organizationService.getOrganizationById(booking.organizationId!);
       }
+      
+      // Create notification for user
+      try {
+        await _notificationService.createBookingNotification(
+          userId: booking.userId,
+          booking: booking,
+          newStatus: BookingStatus.completed,
+        );
+        debugPrint('[BookingService] ✅ Notification created for completed booking');
+      } catch (notifError) {
+        debugPrint('[BookingService] ⚠️ Failed to create notification: $notifError');
+      }
+      
       return booking;
     } catch (e) {
       debugPrint('Failed to complete booking: $e');

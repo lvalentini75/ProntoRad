@@ -250,11 +250,47 @@ class SupabaseAuthManager extends AuthManager with EmailSignInManager {
         }
       }
       
+      // 3. Se non trovato, crea automaticamente un nuovo profilo
       if (profile == null) {
-        debugPrint('[Auth] ⚠️ Profilo non trovato per auth_user_id: $authUserId');
-        _cachedProfile = null;
-        _cachedOrganization = null;
-        return;
+        final authUser = SupabaseConfig.auth.currentUser;
+        if (authUser != null && authUser.email != null) {
+          debugPrint('[Auth] 📝 Profilo non trovato, creo automaticamente per: ${authUser.email}');
+          try {
+            // Estrai nome e cognome dall'email se non disponibili nei metadati
+            final metadata = authUser.userMetadata ?? {};
+            final fullName = metadata['full_name'] as String? ?? '';
+            final nameParts = fullName.split(' ');
+            final firstName = metadata['first_name'] as String? ?? 
+                              (nameParts.isNotEmpty ? nameParts.first : 'Utente');
+            final lastName = metadata['last_name'] as String? ?? 
+                             (nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '');
+            
+            final newUser = app.User(
+              id: '', // Generato dal DB
+              email: authUser.email!,
+              firstName: firstName,
+              lastName: lastName,
+              phoneNumber: authUser.phone ?? '',
+              authUserId: authUserId,
+              role: 'end_user',
+              createdAt: DateTime.now().toUtc(),
+              updatedAt: DateTime.now().toUtc(),
+            );
+            
+            profile = await _userService.ensureUserViaEdge(newUser);
+            debugPrint('[Auth] ✅ Profilo creato automaticamente: ${profile.email}');
+          } catch (e) {
+            debugPrint('[Auth] ❌ Creazione automatica profilo fallita: $e');
+            _cachedProfile = null;
+            _cachedOrganization = null;
+            return;
+          }
+        } else {
+          debugPrint('[Auth] ⚠️ Impossibile creare profilo: email mancante');
+          _cachedProfile = null;
+          _cachedOrganization = null;
+          return;
+        }
       }
       
       // Aggiorna cache profilo

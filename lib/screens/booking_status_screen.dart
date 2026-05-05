@@ -18,6 +18,7 @@ class BookingStatusScreen extends StatefulWidget {
 class _BookingStatusScreenState extends State<BookingStatusScreen> {
   final BookingService _bookingService = BookingService();
   Booking? _booking;
+  List<Booking> _packageBookings = []; // All bookings in the package
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -50,9 +51,23 @@ class _BookingStatusScreenState extends State<BookingStatusScreen> {
       debugPrint('[BookingStatus] User: ${booking.user?.fullName}');
       debugPrint('[BookingStatus] Exam: ${booking.examType?.name}');
       debugPrint('[BookingStatus] Organization: ${booking.organization?.name}');
+      debugPrint('[BookingStatus] PackageId: ${booking.packageId}');
+      debugPrint('[BookingStatus] ParentBookingId: ${booking.parentBookingId}');
+      
+      // If this is a package booking, load all related bookings
+      List<Booking> packageBookings = [];
+      if (booking.packageId != null && booking.packageId!.isNotEmpty) {
+        debugPrint('[BookingStatus] 📦 Loading package bookings...');
+        // If this is the parent booking (no parentBookingId), load children
+        // If this is a child booking, load the parent and siblings
+        final parentId = booking.parentBookingId ?? booking.id;
+        packageBookings = await _bookingService.getPackageBookings(parentId);
+        debugPrint('[BookingStatus] 📦 Loaded ${packageBookings.length} package bookings');
+      }
 
       setState(() {
         _booking = booking;
+        _packageBookings = packageBookings;
         _isLoading = false;
       });
     } catch (e, stack) {
@@ -151,6 +166,8 @@ class _BookingStatusScreenState extends State<BookingStatusScreen> {
   Widget _buildSuccessState() {
     final booking = _booking!;
     final isConfirmed = booking.status == BookingStatus.confirmed;
+    final isPackage = _packageBookings.length > 1;
+    final examCount = _packageBookings.isNotEmpty ? _packageBookings.length : 1;
 
     return SingleChildScrollView(
       padding: AppSpacing.paddingLg,
@@ -187,15 +204,17 @@ class _BookingStatusScreenState extends State<BookingStatusScreen> {
                     color: Colors.white.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.check_circle,
+                  child: Icon(
+                    isPackage ? Icons.folder_special : Icons.check_circle,
                     size: 48,
                     color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  isConfirmed ? 'Prenotazione confermata!' : 'Richiesta inviata!',
+                  isConfirmed 
+                      ? (isPackage ? 'Pacchetto confermato!' : 'Prenotazione confermata!') 
+                      : (isPackage ? 'Richiesta pacchetto inviata!' : 'Richiesta inviata!'),
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -205,8 +224,12 @@ class _BookingStatusScreenState extends State<BookingStatusScreen> {
                 const SizedBox(height: 8),
                 Text(
                   isConfirmed
-                      ? 'La tua prenotazione è stata confermata'
-                      : 'La tua richiesta è stata inviata alla struttura',
+                      ? (isPackage 
+                          ? '$examCount esami confermati' 
+                          : 'La tua prenotazione è stata confermata')
+                      : (isPackage 
+                          ? '$examCount esami inviati alla struttura' 
+                          : 'La tua richiesta è stata inviata alla struttura'),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.9),
                   ),
@@ -220,9 +243,15 @@ class _BookingStatusScreenState extends State<BookingStatusScreen> {
           // Status timeline
           _BookingTimeline(status: booking.status),
           const SizedBox(height: 24),
+          
+          // Package exams list (if it's a package)
+          if (isPackage) ...[
+            _PackageExamsCard(bookings: _packageBookings),
+            const SizedBox(height: 16),
+          ],
 
-          // Booking details card
-          _BookingDetailsCard(booking: booking),
+          // Booking details card (show first/main booking details)
+          _BookingDetailsCard(booking: booking, isPackage: isPackage, totalBookings: examCount),
           const SizedBox(height: 16),
 
           // Patient details card
@@ -384,10 +413,149 @@ class _TimelineStep extends StatelessWidget {
   }
 }
 
+/// Card showing all exams in the package
+class _PackageExamsCard extends StatelessWidget {
+  final List<Booking> bookings;
+
+  const _PackageExamsCard({required this.bookings});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: AppSpacing.paddingMd,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.folder_special, color: LightModeColors.lightPrimary, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Esami del Pacchetto (${bookings.length})',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...bookings.asMap().entries.map((entry) {
+            final index = entry.key;
+            final booking = entry.value;
+            final isLast = index == bookings.length - 1;
+            
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: LightModeColors.lightPrimary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            color: LightModeColors.lightPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            booking.examType?.name ?? 'Esame ${index + 1}',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${DateFormat('HH:mm').format(booking.bookingTime)} - €${booking.price.toStringAsFixed(2)}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: LightModeColors.lightOnSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(booking.status).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        booking.status.displayName,
+                        style: TextStyle(
+                          color: _getStatusColor(booking.status),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (!isLast) ...[
+                  const SizedBox(height: 8),
+                  Divider(color: Colors.grey.shade200),
+                  const SizedBox(height: 8),
+                ],
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+  
+  Color _getStatusColor(BookingStatus status) {
+    switch (status) {
+      case BookingStatus.requested:
+        return Colors.orange;
+      case BookingStatus.confirmed:
+        return Colors.green;
+      case BookingStatus.rejected:
+        return Colors.red;
+      case BookingStatus.cancelled:
+        return Colors.grey;
+      case BookingStatus.completed:
+        return Colors.blue;
+    }
+  }
+}
+
 class _BookingDetailsCard extends StatelessWidget {
   final Booking booking;
+  final bool isPackage;
+  final int totalBookings;
 
-  const _BookingDetailsCard({required this.booking});
+  const _BookingDetailsCard({
+    required this.booking,
+    this.isPackage = false,
+    this.totalBookings = 1,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -420,11 +588,12 @@ class _BookingDetailsCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _DetailRow(
-            icon: Icons.science,
-            label: 'Esame',
-            value: booking.examType?.name ?? 'N/A',
-          ),
+          if (!isPackage)
+            _DetailRow(
+              icon: Icons.science,
+              label: 'Esame',
+              value: booking.examType?.name ?? 'N/A',
+            ),
           _DetailRow(
             icon: Icons.business,
             label: 'Struttura',
@@ -442,13 +611,15 @@ class _BookingDetailsCard extends StatelessWidget {
           ),
           _DetailRow(
             icon: Icons.access_time,
-            label: 'Orario',
+            label: isPackage ? 'Orario inizio' : 'Orario',
             value: DateFormat('HH:mm').format(booking.bookingTime),
           ),
           _DetailRow(
             icon: Icons.euro,
-            label: 'Prezzo',
-            value: '€${booking.price.toStringAsFixed(2)}',
+            label: isPackage ? 'Prezzo totale' : 'Prezzo',
+            value: isPackage 
+                ? '€${(booking.price * totalBookings).toStringAsFixed(2)}'
+                : '€${booking.price.toStringAsFixed(2)}',
           ),
           if (booking.needsTransport)
             _DetailRow(

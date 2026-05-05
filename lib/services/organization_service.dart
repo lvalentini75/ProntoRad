@@ -81,44 +81,54 @@ class OrganizationService {
     }
   }
 
-  /// Cerca organizzazioni per località E che offrono un determinato esame
+  /// Cerca organizzazioni per località E che offrono un determinato esame o pacchetto
   Future<List<Organization>> searchOrganizations({
-    required String examId,
+    String? examId,
+    String? packageId,
     String? region,
     String? province,
     String? city,
   }) async {
     try {
-      debugPrint('[OrgService] 🔍 Searching: exam=$examId, region=$region, province=$province, city=$city');
+      debugPrint('[OrgService] 🔍 Searching: exam=$examId, package=$packageId, region=$region, province=$province, city=$city');
       
-      // 1. Trova organization_id che offrono l'esame
-      final tariffs = await SupabaseConfig.client
-          .from('tariffs')
-          .select('organization_id, exam_type_id')
-          .eq('exam_type_id', examId);
+      Set<String> orgIds = {};
       
-      debugPrint('[OrgService] 📋 Found ${(tariffs as List).length} tariffs for exam $examId');
-      for (final t in tariffs) {
-        debugPrint('   - org: ${t['organization_id']}');
+      // 1a. Se c'è un examId, trova le organizzazioni che lo offrono
+      if (examId != null) {
+        final tariffs = await SupabaseConfig.client
+            .from('tariffs')
+            .select('organization_id, exam_type_id')
+            .eq('exam_type_id', examId);
+        
+        debugPrint('[OrgService] 📋 Found ${(tariffs as List).length} tariffs for exam $examId');
+        orgIds.addAll((tariffs as List).map((t) => t['organization_id'] as String));
       }
       
-      final orgIds = (tariffs as List)
-          .map((t) => t['organization_id'] as String)
-          .toSet()
-          .toList();
+      // 1b. Se c'è un packageId, trova le organizzazioni che lo offrono
+      if (packageId != null) {
+        final packages = await SupabaseConfig.client
+            .from('exam_packages')
+            .select('organization_id')
+            .eq('id', packageId)
+            .eq('is_active', true);
+        
+        debugPrint('[OrgService] 📦 Found ${(packages as List).length} packages');
+        orgIds.addAll((packages as List).map((p) => p['organization_id'] as String));
+      }
       
       if (orgIds.isEmpty) {
-        debugPrint('[OrgService] ❌ No organizations offer exam $examId');
+        debugPrint('[OrgService] ❌ No organizations offer this exam/package');
         return [];
       }
       
-      debugPrint('[OrgService] 🏥 Unique organizations offering exam: ${orgIds.length}');
+      debugPrint('[OrgService] 🏥 Unique organizations: ${orgIds.length}');
       
       // 2. Filtra per località
       dynamic query = SupabaseConfig.client
           .from('organizations')
           .select()
-          .inFilter('id', orgIds);
+          .inFilter('id', orgIds.toList());
       
       if (region != null && region.isNotEmpty) {
         query = query.ilike('region', '%$region%');

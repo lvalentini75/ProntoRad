@@ -166,6 +166,21 @@ class DashboardSidebar extends StatelessWidget {
           ),
         ]),
         const SizedBox(height: 8),
+        _NavGroup(title: 'Esami Multipli', children: [
+          _NavItem(
+            icon: Icons.inventory_2_rounded,
+            label: 'Pacchetti Esami',
+            route: '/dashboard/exam-packages',
+            isActive: currentPath == '/dashboard/exam-packages',
+          ),
+          _NavItem(
+            icon: Icons.link_rounded,
+            label: 'Compatibilità',
+            route: '/dashboard/exam-compatibility',
+            isActive: currentPath == '/dashboard/exam-compatibility',
+          ),
+        ]),
+        const SizedBox(height: 8),
         _NavGroup(title: 'Prenotazioni', children: [
           _NavItem(
             icon: Icons.add_circle_outline,
@@ -266,6 +281,21 @@ class DashboardSidebar extends StatelessWidget {
             label: 'Disponibilità',
             route: '/dashboard/availability',
             isActive: currentPath == '/dashboard/availability',
+          ),
+        ]),
+        const SizedBox(height: 8),
+        _NavGroup(title: 'Esami Multipli', children: [
+          _NavItem(
+            icon: Icons.inventory_2_rounded,
+            label: 'Pacchetti Esami',
+            route: '/dashboard/exam-packages',
+            isActive: currentPath == '/dashboard/exam-packages',
+          ),
+          _NavItem(
+            icon: Icons.link_rounded,
+            label: 'Compatibilità',
+            route: '/dashboard/exam-compatibility',
+            isActive: currentPath == '/dashboard/exam-compatibility',
           ),
         ]),
         const SizedBox(height: 8),

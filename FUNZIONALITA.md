@@ -601,6 +601,79 @@ Utile per prenotazioni telefoniche o walk-in.
 - **Crea override personalizzato**: Prezzo specifico per la struttura
 - **Storico prezzi**: Log modifiche prezzi nel tempo
 
+### Pacchetti Esami (Esami Multipli)
+
+**Path**: `/dashboard/exam-packages`
+
+#### Funzionalità
+
+##### 1. **Visualizzazione Pacchetti**
+- **Lista pacchetti** predefiniti per l'organizzazione
+- **Informazioni**:
+  - Nome pacchetto (es. "RM Colonna Completa")
+  - Descrizione
+  - Numero esami inclusi
+  - Durata totale (minuti)
+  - Tipo calcolo tempo (Cumulativo o Slot singolo)
+  - Prezzo pacchetto (opzionale)
+  - Stato attivo/inattivo
+
+##### 2. **Crea Nuovo Pacchetto**
+- **Form**:
+  - Nome pacchetto (required)
+  - Descrizione (optional)
+  - Selezione esami da includere (checkbox multipli raggruppati per categoria)
+  - Durata totale in minuti
+  - Tipo calcolo: 
+    - **Cumulativo**: I tempi degli esami si sommano (es. RM Cervicale 30min + RM Dorsale 30min = 60min)
+    - **Slot singolo**: Usano lo slot più lungo (es. TAC multi-distretto)
+  - Prezzo pacchetto (opzionale, può essere scontato rispetto alla somma singoli)
+
+##### 3. **Modifica/Elimina Pacchetto**
+- Modifica tutti i campi
+- Toggle attivo/inattivo senza eliminare
+- Eliminazione con conferma
+
+##### 4. **Import/Export JSON**
+- **Esporta**: Genera JSON con tutti i pacchetti
+- **Importa**: Carica pacchetti da file JSON (utile per replicare configurazioni)
+
+### Compatibilità Esami
+
+**Path**: `/dashboard/exam-compatibility`
+
+#### Funzionalità
+
+##### 1. **Tipi di Compatibilità**
+- **Stesso Slot** (`same_slot`): Esami nello stesso slot temporale (es. TAC multi-distretto)
+- **Sequenziale** (`sequential`): Esami consecutivi, stessa sala (tempi sommati)
+- **Sale Diverse** (`different_room`): Esami in sale diverse con intervallo (es. mammografia + eco mammaria)
+
+##### 2. **Crea Regola di Compatibilità**
+- **Form**:
+  - Esame 1 (dropdown)
+  - Tipo compatibilità (radio buttons)
+  - Esame 2 (dropdown)
+  - Intervallo tra esami in minuti (solo per `different_room`)
+  - Note (opzionale)
+
+##### 3. **Visualizzazione Regole**
+- Card con visualizzazione grafica esame1 ↔ esame2
+- Icona e colore per tipo compatibilità
+- Intervallo tempo mostrato per `different_room`
+- Toggle attivo/inattivo
+
+##### 4. **Import/Export JSON**
+- **Esporta**: Genera JSON con tutte le regole
+- **Importa**: Carica regole da file JSON
+
+##### 5. **Calcolo Automatico Durata**
+- Il servizio `ExamPackageService` calcola automaticamente:
+  - Durata totale per lista di esami
+  - Considera regole `same_slot` (usa durata maggiore)
+  - Considera regole `sequential` (somma durate)
+  - Considera regole `different_room` (aggiunge time_gap)
+
 ---
 
 ## Gestione Strutture/Organizzazioni

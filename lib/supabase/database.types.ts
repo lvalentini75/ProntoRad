@@ -50,6 +50,13 @@ export type Database = {
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "audit_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_internal"
+            referencedColumns: ["id"]
+          },
         ]
       }
       availability_slots: {
@@ -58,7 +65,7 @@ export type Database = {
           created_at: string | null
           day_of_week: number | null
           end_time: string
-          exam_id: string | null
+          exam_category: string | null
           exam_type_id: string | null
           facility_id: string | null
           id: string
@@ -77,7 +84,7 @@ export type Database = {
           created_at?: string | null
           day_of_week?: number | null
           end_time: string
-          exam_id?: string | null
+          exam_category?: string | null
           exam_type_id?: string | null
           facility_id?: string | null
           id?: string
@@ -96,7 +103,7 @@ export type Database = {
           created_at?: string | null
           day_of_week?: number | null
           end_time?: string
-          exam_id?: string | null
+          exam_category?: string | null
           exam_type_id?: string | null
           facility_id?: string | null
           id?: string
@@ -116,13 +123,6 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "availability_slots_exam_id_fkey"
-            columns: ["exam_id"]
-            isOneToOne: false
-            referencedRelation: "exam_types"
             referencedColumns: ["id"]
           },
           {
@@ -152,14 +152,23 @@ export type Database = {
         Row: {
           booking_date: string
           booking_time: string
+          confirmed_at: string | null
+          confirmed_by: string | null
           created_at: string
-          exam_type_id: string
-          facility_id: string
+          exam_type_id: string | null
+          facility_id: string | null
+          gfr_value: number | null
           id: string
           is_home_service: boolean | null
           needs_transport: boolean | null
           notes: string | null
+          operator_notes: string | null
+          organization_id: string | null
+          package_id: string | null
+          parent_booking_id: string | null
           price: number
+          rejected_reason: string | null
+          slot_id: string | null
           status: string
           updated_at: string
           urgency_level: string
@@ -168,14 +177,23 @@ export type Database = {
         Insert: {
           booking_date: string
           booking_time: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           created_at?: string
-          exam_type_id: string
-          facility_id: string
+          exam_type_id?: string | null
+          facility_id?: string | null
+          gfr_value?: number | null
           id?: string
           is_home_service?: boolean | null
           needs_transport?: boolean | null
           notes?: string | null
+          operator_notes?: string | null
+          organization_id?: string | null
+          package_id?: string | null
+          parent_booking_id?: string | null
           price: number
+          rejected_reason?: string | null
+          slot_id?: string | null
           status?: string
           updated_at?: string
           urgency_level?: string
@@ -184,20 +202,43 @@ export type Database = {
         Update: {
           booking_date?: string
           booking_time?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           created_at?: string
-          exam_type_id?: string
-          facility_id?: string
+          exam_type_id?: string | null
+          facility_id?: string | null
+          gfr_value?: number | null
           id?: string
           is_home_service?: boolean | null
           needs_transport?: boolean | null
           notes?: string | null
+          operator_notes?: string | null
+          organization_id?: string | null
+          package_id?: string | null
+          parent_booking_id?: string | null
           price?: number
+          rejected_reason?: string | null
+          slot_id?: string | null
           status?: string
           updated_at?: string
           urgency_level?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "bookings_confirmed_by_fkey"
+            columns: ["confirmed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_confirmed_by_fkey"
+            columns: ["confirmed_by"]
+            isOneToOne: false
+            referencedRelation: "users_internal"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bookings_exam_type_id_fkey"
             columns: ["exam_type_id"]
@@ -213,10 +254,163 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "bookings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "exam_packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_parent_booking_id_fkey"
+            columns: ["parent_booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "availability_slots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "availability_slots_with_org"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "bookings_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_internal"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_compatibility: {
+        Row: {
+          compatibility_type: string
+          created_at: string
+          exam_id_1: string
+          exam_id_2: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          organization_id: string | null
+          time_gap_minutes: number
+          updated_at: string
+        }
+        Insert: {
+          compatibility_type?: string
+          created_at?: string
+          exam_id_1: string
+          exam_id_2: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          organization_id?: string | null
+          time_gap_minutes?: number
+          updated_at?: string
+        }
+        Update: {
+          compatibility_type?: string
+          created_at?: string
+          exam_id_1?: string
+          exam_id_2?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          organization_id?: string | null
+          time_gap_minutes?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_compatibility_exam_id_1_fkey"
+            columns: ["exam_id_1"]
+            isOneToOne: false
+            referencedRelation: "exam_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_compatibility_exam_id_2_fkey"
+            columns: ["exam_id_2"]
+            isOneToOne: false
+            referencedRelation: "exam_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_compatibility_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_packages: {
+        Row: {
+          created_at: string
+          description: string | null
+          exam_ids: string[]
+          id: string
+          is_active: boolean
+          is_cumulative: boolean
+          name: string
+          organization_id: string | null
+          package_price: number | null
+          total_duration_minutes: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          exam_ids?: string[]
+          id?: string
+          is_active?: boolean
+          is_cumulative?: boolean
+          name: string
+          organization_id?: string | null
+          package_price?: number | null
+          total_duration_minutes?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          exam_ids?: string[]
+          id?: string
+          is_active?: boolean
+          is_cumulative?: boolean
+          name?: string
+          organization_id?: string | null
+          package_price?: number | null
+          total_duration_minutes?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_packages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -312,33 +506,48 @@ export type Database = {
       }
       facility_exam_offerings: {
         Row: {
-          created_at: string | null
-          exam_id: string
+          created_at: string
+          duration_minutes: number
+          exam_type_id: string
           facility_id: string
           id: string
-          is_active: boolean | null
-          updated_at: string | null
+          is_available: boolean
+          max_daily_bookings: number
+          preparation_notes: string | null
+          price: number
+          ssn_price: number
+          updated_at: string
         }
         Insert: {
-          created_at?: string | null
-          exam_id: string
+          created_at?: string
+          duration_minutes?: number
+          exam_type_id: string
           facility_id: string
           id?: string
-          is_active?: boolean | null
-          updated_at?: string | null
+          is_available?: boolean
+          max_daily_bookings?: number
+          preparation_notes?: string | null
+          price?: number
+          ssn_price?: number
+          updated_at?: string
         }
         Update: {
-          created_at?: string | null
-          exam_id?: string
+          created_at?: string
+          duration_minutes?: number
+          exam_type_id?: string
           facility_id?: string
           id?: string
-          is_active?: boolean | null
-          updated_at?: string | null
+          is_available?: boolean
+          max_daily_bookings?: number
+          preparation_notes?: string | null
+          price?: number
+          ssn_price?: number
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "facility_exam_offerings_exam_id_fkey"
-            columns: ["exam_id"]
+            foreignKeyName: "facility_exam_offerings_exam_type_id_fkey"
+            columns: ["exam_type_id"]
             isOneToOne: false
             referencedRelation: "exam_types"
             referencedColumns: ["id"]
@@ -352,6 +561,61 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          booking_id: string | null
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users_internal"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           address: string | null
@@ -359,11 +623,15 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          latitude: number | null
           logo_url: string | null
+          longitude: number | null
           name: string
           notes: string | null
+          onboarding_completed: boolean
           org_type: string
           phone: string | null
+          postal_code: string | null
           province: string | null
           region: string | null
           updated_at: string
@@ -376,11 +644,15 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          latitude?: number | null
           logo_url?: string | null
+          longitude?: number | null
           name: string
           notes?: string | null
+          onboarding_completed?: boolean
           org_type: string
           phone?: string | null
+          postal_code?: string | null
           province?: string | null
           region?: string | null
           updated_at?: string
@@ -393,11 +665,15 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          latitude?: number | null
           logo_url?: string | null
+          longitude?: number | null
           name?: string
           notes?: string | null
+          onboarding_completed?: boolean
           org_type?: string
           phone?: string | null
+          postal_code?: string | null
           province?: string | null
           region?: string | null
           updated_at?: string
@@ -405,6 +681,41 @@ export type Database = {
           website?: string | null
         }
         Relationships: []
+      }
+      standard_tariffs: {
+        Row: {
+          created_at: string
+          currency: string
+          exam_type_id: string
+          id: string
+          price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          exam_type_id: string
+          id?: string
+          price?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          exam_type_id?: string
+          id?: string
+          price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "standard_tariffs_exam_type_id_fkey"
+            columns: ["exam_type_id"]
+            isOneToOne: true
+            referencedRelation: "exam_types"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tariffs: {
         Row: {
@@ -455,8 +766,10 @@ export type Database = {
         Row: {
           auth_user_id: string | null
           created_at: string
+          date_of_birth: string | null
           email: string
           first_name: string
+          fiscal_code: string | null
           id: string
           last_name: string
           organization_id: string | null
@@ -467,8 +780,10 @@ export type Database = {
         Insert: {
           auth_user_id?: string | null
           created_at?: string
+          date_of_birth?: string | null
           email: string
           first_name: string
+          fiscal_code?: string | null
           id?: string
           last_name: string
           organization_id?: string | null
@@ -479,8 +794,10 @@ export type Database = {
         Update: {
           auth_user_id?: string | null
           created_at?: string
+          date_of_birth?: string | null
           email?: string
           first_name?: string
+          fiscal_code?: string | null
           id?: string
           last_name?: string
           organization_id?: string | null
@@ -500,9 +817,134 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      availability_slots_with_org: {
+        Row: {
+          booking_id: string | null
+          created_at: string | null
+          day_of_week: number | null
+          end_time: string | null
+          exam_body_district: string | null
+          exam_category: string | null
+          exam_category_resolved: string | null
+          exam_name: string | null
+          exam_type_id: string | null
+          facility_id: string | null
+          id: string | null
+          is_active: boolean | null
+          is_available: boolean | null
+          max_bookings: number | null
+          notes: string | null
+          organization_id: string | null
+          organization_name: string | null
+          organization_type: string | null
+          specific_date: string | null
+          staff_user_id: string | null
+          start_time: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availability_slots_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_slots_exam_type_id_fkey"
+            columns: ["exam_type_id"]
+            isOneToOne: false
+            referencedRelation: "exam_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_slots_facility_id_fkey"
+            columns: ["facility_id"]
+            isOneToOne: false
+            referencedRelation: "facilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_slots_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users_internal: {
+        Row: {
+          auth_user_id: string | null
+          created_at: string | null
+          date_of_birth: string | null
+          email: string | null
+          first_name: string | null
+          fiscal_code: string | null
+          id: string | null
+          last_name: string | null
+          organization_id: string | null
+          phone_number: string | null
+          role: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          auth_user_id?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          email?: string | null
+          first_name?: string | null
+          fiscal_code?: string | null
+          id?: string | null
+          last_name?: string | null
+          organization_id?: string | null
+          phone_number?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          auth_user_id?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          email?: string | null
+          first_name?: string | null
+          fiscal_code?: string | null
+          id?: string | null
+          last_name?: string | null
+          organization_id?: string | null
+          phone_number?: string | null
+          role?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "users_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      admin_create_user_profile: {
+        Args: {
+          p_auth_user_id: string
+          p_email: string
+          p_first_name: string
+          p_fiscal_code?: string
+          p_last_name: string
+          p_organization_id?: string
+          p_phone_number?: string
+          p_role?: string
+        }
+        Returns: string
+      }
+      can_access_organization: {
+        Args: { target_org_id: string }
+        Returns: boolean
+      }
       check_slot_overlap: {
         Args: {
           p_end_time: string
@@ -510,6 +952,85 @@ export type Database = {
           p_staff_user_id: string
           p_start_time: string
         }
+        Returns: boolean
+      }
+      check_user_exists_by_email: {
+        Args: { user_email: string }
+        Returns: {
+          auth_id: string
+          exists_in_users: boolean
+          user_id: string
+          user_role: string
+        }[]
+      }
+      create_booking_bypass_rls: {
+        Args: {
+          p_booking_date?: string
+          p_booking_time?: string
+          p_exam_type_id?: string
+          p_notes?: string
+          p_organization_id?: string
+          p_price?: number
+          p_slot_id?: string
+          p_urgency_level?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      create_facility_exam_offering: {
+        Args: {
+          p_exam_type_id: string
+          p_facility_id: string
+          p_price?: number
+          p_ssn_price?: number
+        }
+        Returns: Json
+      }
+      current_user_organization_id: { Args: never; Returns: string }
+      delete_facility_exam_offering: {
+        Args: { p_offering_id: string }
+        Returns: boolean
+      }
+      get_booking_with_user: { Args: { p_booking_id: string }; Returns: Json }
+      get_current_user_role: {
+        Args: never
+        Returns: {
+          org_id: string
+          user_id: string
+          user_role: string
+        }[]
+      }
+      get_my_organization_id: { Args: never; Returns: string }
+      get_my_role: { Args: never; Returns: string }
+      get_organization_facility_id: {
+        Args: { org_id: string }
+        Returns: string
+      }
+      get_user_profile_by_auth_id: {
+        Args: { p_auth_user_id: string }
+        Returns: {
+          auth_user_id: string
+          created_at: string
+          email: string
+          first_name: string
+          fiscal_code: string
+          id: string
+          last_name: string
+          organization_id: string
+          phone_number: string
+          role: string
+          updated_at: string
+        }[]
+      }
+      is_admin_user: { Args: never; Returns: boolean }
+      is_org_admin: { Args: never; Returns: boolean }
+      is_super_admin: { Args: never; Returns: boolean }
+      link_user_to_organization: {
+        Args: { p_organization_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      user_has_booking_at_organization: {
+        Args: { p_org_id: string; p_user_id: string }
         Returns: boolean
       }
     }

@@ -24,7 +24,14 @@ class HomeScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 24),
+                    // EOC Logo
+                    Image.asset(
+                      'assets/images/logo_EOC.png',
+                      height: 120,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 20),
                     // Page title
                     Text(
                       'Prenota il tuo Esame',
@@ -47,46 +54,61 @@ class HomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 40),
                     Expanded(
-                      child: GridView.count(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 20,
-                        crossAxisSpacing: 20,
-                        childAspectRatio: 0.92,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          ExamTypeCard(
-                            title: 'RM (Risonanza)',
-                            color: const Color(0xFF5B7FB7),
-                            iconPainter: RMIconPainter(),
-                            assetIconPath: 'assets/rm_icon.png',
-                            onTap: () => context.push('/exam-selection',
-                                extra: ExamCategory.rm),
-                          ),
-                          ExamTypeCard(
-                            title: 'TAC (Tomografia)',
-                            color: const Color(0xFF48BDC5),
-                            iconPainter: TACIconPainter(),
-                            assetIconPath: 'assets/tac_icon.png',
-                            onTap: () => context.push('/exam-selection',
-                                extra: ExamCategory.tac),
-                          ),
-                          ExamTypeCard(
-                            title: 'ECO (Ecografia)',
-                            color: const Color(0xFF7AC77E),
-                            iconPainter: ECOIconPainter(),
-                            assetIconPath: 'assets/eco_icon.png',
-                            onTap: () => context.push('/exam-selection',
-                                extra: ExamCategory.eco),
-                          ),
-                          ExamTypeCard(
-                            title: 'RX (Radiografia)',
-                            color: const Color(0xFFFFA85C),
-                            iconPainter: RXIconPainter(),
-                            assetIconPath: 'assets/rx_icon.png',
-                            onTap: () => context.push('/exam-selection',
-                                extra: ExamCategory.rx),
-                          ),
-                        ],
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Column(
+                          children: [
+                            GridView.count(
+                              crossAxisCount: 2,
+                              mainAxisSpacing: 20,
+                              crossAxisSpacing: 20,
+                              childAspectRatio: 0.92,
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              children: [
+                                ExamTypeCard(
+                                  title: 'RM (Risonanza)',
+                                  color: const Color(0xFF5B7FB7),
+                                  iconPainter: RMIconPainter(),
+                                  assetIconPath: 'assets/rm_icon.png',
+                                  onTap: () => context.push('/exam-selection',
+                                      extra: ExamCategory.rm),
+                                ),
+                                ExamTypeCard(
+                                  title: 'TAC (Tomografia)',
+                                  color: const Color(0xFF48BDC5),
+                                  iconPainter: TACIconPainter(),
+                                  assetIconPath: 'assets/tac_icon.png',
+                                  onTap: () => context.push('/exam-selection',
+                                      extra: ExamCategory.tac),
+                                ),
+                                ExamTypeCard(
+                                  title: 'ECO (Ecografia)',
+                                  color: const Color(0xFF7AC77E),
+                                  iconPainter: ECOIconPainter(),
+                                  assetIconPath: 'assets/eco_icon.png',
+                                  onTap: () => context.push('/exam-selection',
+                                      extra: ExamCategory.eco),
+                                ),
+                                ExamTypeCard(
+                                  title: 'RX (Radiografia)',
+                                  color: const Color(0xFFFFA85C),
+                                  iconPainter: RXIconPainter(),
+                                  assetIconPath: 'assets/rx_icon.png',
+                                  onTap: () => context.push('/exam-selection',
+                                      extra: ExamCategory.rx),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            // Pacchetti Esami Section
+                            _PackagesButton(
+                              onTap: () => context.push('/packages'),
+                              label: 'Prenotazione esami multipli',
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -549,4 +571,85 @@ class RXIconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Bottone per accedere ai pacchetti esami
+class _PackagesButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final String label;
+
+  const _PackagesButton({required this.onTap, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              LightModeColors.lightPrimary,
+              LightModeColors.lightPrimary.withValues(alpha: 0.85),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: LightModeColors.lightPrimary.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.inventory_2_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Pacchetti esami combinati',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.8),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: Colors.white.withValues(alpha: 0.8),
+              size: 24,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

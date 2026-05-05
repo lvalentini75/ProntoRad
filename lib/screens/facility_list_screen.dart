@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:xraynow/models/exam_type.dart';
+import 'package:xraynow/models/exam_package.dart';
 import 'package:xraynow/models/organization.dart';
 import 'package:xraynow/models/booking.dart';
 import 'package:xraynow/models/tariff.dart';
@@ -33,7 +34,8 @@ class OrganizationWithOffering {
 }
 
 class FacilityListScreen extends StatefulWidget {
-  final ExamType exam;
+  final ExamType? exam;
+  final ExamPackage? examPackage;
   final String region;
   final String province;
   final String city;
@@ -42,13 +44,20 @@ class FacilityListScreen extends StatefulWidget {
 
   const FacilityListScreen({
     super.key,
-    required this.exam,
+    this.exam,
+    this.examPackage,
     required this.region,
     required this.province,
     required this.city,
     this.userLat,
     this.userLon,
-  });
+  }) : assert(exam != null || examPackage != null, 'Either exam or examPackage must be provided');
+  
+  /// Ottiene il nome da mostrare (esame o pacchetto)
+  String get displayName => exam?.name ?? examPackage?.name ?? 'Esame';
+  
+  /// Ottiene la durata dell'appuntamento (30 min default per singolo esame)
+  int get durationMinutes => examPackage?.totalDurationMinutes ?? 30;
 
   @override
   State<FacilityListScreen> createState() => _FacilityListScreenState();
@@ -96,13 +105,19 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
   Future<void> _loadOrganizations() async {
     setState(() => _isLoading = true);
     try {
+      final examId = widget.exam?.id;
+      final packageId = widget.examPackage?.id;
+      final examCategory = widget.exam?.category.name.toUpperCase() ?? '';
+      
       debugPrint('[FacilityList] 🔍 Searching facilities for:');
-      debugPrint('   - Exam: ${widget.exam.name} (id=${widget.exam.id}, category=${widget.exam.category})');
+      debugPrint('   - Exam: ${widget.exam?.name ?? "N/A"} (id=$examId, category=$examCategory)');
+      debugPrint('   - Package: ${widget.examPackage?.name ?? "N/A"} (id=$packageId)');
       debugPrint('   - Location: region=${widget.region}, province=${widget.province}, city=${widget.city}');
       
-      // Cerca organizzazioni che offrono l'esame nella località specificata
+      // Cerca organizzazioni che offrono l'esame/pacchetto nella località specificata
       final orgs = await _orgService.searchOrganizations(
-        examId: widget.exam.id,
+        examId: examId,
+        packageId: packageId,
         region: widget.region,
         province: widget.province,
         city: widget.city,
@@ -114,10 +129,15 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
       final List<OrganizationWithOffering> enrichedList = [];
       
       for (final org in orgs) {
-        // Carica tariffa per l'esame
-        final tariff = await _tariffService.getTariff(org.id, widget.exam.id);
+        // Carica tariffa per l'esame (o prezzo del pacchetto se è un pacchetto)
+        Tariff? tariff;
+        if (widget.exam != null) {
+          tariff = await _tariffService.getTariff(org.id, widget.exam!.id);
+        }
+        // Per i pacchetti, usiamo il prezzo del pacchetto se disponibile
+        final packagePrice = widget.examPackage?.packagePrice;
         
-        // Carica slot disponibili per questa organizzazione e esame
+        // Carica slot disponibili per questa organizzazione e esame/pacchetto
         AvailabilitySlot? firstSlot;
         DateTime? firstDate;
         
@@ -125,43 +145,46 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
           final now = DateTime.now();
           final slots = await _availabilityService.getAllSlotsForOrganization(org.id);
           
-          // Filtra slot per questo esame (exact match) O per la sua macrocategoria
-          // IMPORTANTE: Il confronto di examCategory deve essere case-insensitive
-          // perché la dashboard salva 'RM' maiuscolo ma l'enum.name restituisce 'rm' minuscolo
-          final examCategoryUpper = widget.exam.category.name.toUpperCase();
+          // Determina la categoria per il match
+          final examCategoryUpper = widget.exam?.category.name.toUpperCase() ?? '';
+          final examIds = widget.examPackage?.examIds ?? [];
           
-          // Helper per verificare se uno slot appartiene alla categoria cercata
-          bool slotMatchesCategory(AvailabilitySlot s) {
-            // Match esatto per examId
-            if (s.examId == widget.exam.id) return true;
-            
-            // Match per examCategory (se valorizzata)
-            if (s.examCategory != null && s.examCategory!.toUpperCase() == examCategoryUpper) {
-              return true;
-            }
-            
-            // Fallback: deriva la categoria dall'examId (per slot legacy senza examCategory)
-            if (s.examCategory == null && s.examId != null && _examIdToCategory.containsKey(s.examId)) {
-              final derivedCategory = _examIdToCategory[s.examId]!.toUpperCase();
-              if (derivedCategory == examCategoryUpper) {
+          // Helper per verificare se uno slot è compatibile
+          bool slotMatchesExamOrPackage(AvailabilitySlot s) {
+            // Per singolo esame
+            if (widget.exam != null) {
+              // Match esatto per examId
+              if (s.examId == widget.exam!.id) return true;
+              
+              // Match per examCategory (se valorizzata)
+              if (s.examCategory != null && s.examCategory!.toUpperCase() == examCategoryUpper) {
                 return true;
               }
+              
+              // Fallback: deriva la categoria dall'examId (per slot legacy senza examCategory)
+              if (s.examCategory == null && s.examId != null && _examIdToCategory.containsKey(s.examId)) {
+                final derivedCategory = _examIdToCategory[s.examId]!.toUpperCase();
+                if (derivedCategory == examCategoryUpper) {
+                  return true;
+                }
+              }
+            }
+            
+            // Per pacchetto: verifica se lo slot copre almeno uno degli esami del pacchetto
+            if (widget.examPackage != null && examIds.isNotEmpty) {
+              if (s.examId != null && examIds.contains(s.examId)) return true;
             }
             
             return false;
           }
           
-          final slotsByExamId = slots.where((s) => s.examId == widget.exam.id && s.isAvailable && s.startTime.isAfter(now)).length;
-          final slotsByCategory = slots.where((s) => s.examCategory?.toUpperCase() == examCategoryUpper && s.isAvailable && s.startTime.isAfter(now)).length;
-          final slotsByDerived = slots.where((s) => s.examCategory == null && s.examId != null && _examIdToCategory[s.examId]?.toUpperCase() == examCategoryUpper && s.isAvailable && s.startTime.isAfter(now)).length;
-          
           final availableSlots = slots.where((s) => 
-            slotMatchesCategory(s) &&
+            slotMatchesExamOrPackage(s) &&
             s.isAvailable &&
             s.startTime.isAfter(now)
           ).toList();
           
-          debugPrint('[FacilityList] Org ${org.name}: ${slotsByExamId} slot per examId, ${slotsByCategory} slot per category, ${slotsByDerived} slot per derived category, ${availableSlots.length} totali');
+          debugPrint('[FacilityList] Org ${org.name}: ${availableSlots.length} slot disponibili');
           
           // Ordina per data/ora e prendi il primo
           if (availableSlots.isNotEmpty) {
@@ -342,6 +365,7 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
                           return OrganizationSearchCard(
                             data: item,
                             exam: widget.exam,
+                            examPackage: widget.examPackage,
                             onBook: () => _showTimeSlotSelection(item),
                           );
                         },
@@ -360,6 +384,7 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
       builder: (context) => TimeSlotSheet(
         organization: item.organization,
         exam: widget.exam,
+        examPackage: widget.examPackage,
         tariff: item.tariff,
         urgencyLevel: _urgencyLevel,
         onUrgencyChanged: (level) => setState(() => _urgencyLevel = level),
@@ -370,13 +395,15 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
 
 class OrganizationSearchCard extends StatelessWidget {
   final OrganizationWithOffering data;
-  final ExamType exam;
+  final ExamType? exam;
+  final ExamPackage? examPackage;
   final VoidCallback onBook;
 
   const OrganizationSearchCard({
     super.key,
     required this.data,
-    required this.exam,
+    this.exam,
+    this.examPackage,
     required this.onBook,
   });
 
@@ -538,7 +565,8 @@ class OrganizationSearchCard extends StatelessWidget {
 
 class TimeSlotSheet extends StatefulWidget {
   final Organization organization;
-  final ExamType exam;
+  final ExamType? exam;
+  final ExamPackage? examPackage;
   final Tariff? tariff;
   final UrgencyLevel urgencyLevel;
   final ValueChanged<UrgencyLevel> onUrgencyChanged;
@@ -546,11 +574,14 @@ class TimeSlotSheet extends StatefulWidget {
   const TimeSlotSheet({
     super.key,
     required this.organization,
-    required this.exam,
+    this.exam,
+    this.examPackage,
     this.tariff,
     required this.urgencyLevel,
     required this.onUrgencyChanged,
-  });
+  }) : assert(exam != null || examPackage != null);
+  
+  String get displayName => exam?.name ?? examPackage?.name ?? 'Esame';
 
   @override
   State<TimeSlotSheet> createState() => _TimeSlotSheetState();
@@ -761,7 +792,8 @@ class _TimeSlotSheetState extends State<TimeSlotSheet> {
                         context.push(
                           '/booking-confirmation',
                           extra: {
-                            'exam': widget.exam,
+                            if (widget.exam != null) 'exam': widget.exam,
+                            if (widget.examPackage != null) 'examPackage': widget.examPackage,
                             'organizationId': widget.organization.id,
                             'organizationName': widget.organization.name,
                             'date': _selectedDate,
@@ -796,68 +828,53 @@ class _TimeSlotSheetState extends State<TimeSlotSheet> {
     });
 
     try {
-      debugPrint('[TimeSlotSheet] 🔍 Carico slot per org=${widget.organization.id} (${widget.organization.name}), exam=${widget.exam.id} (${widget.exam.name}), date=${date.day}/${date.month}/${date.year}');
+      final examId = widget.exam?.id;
+      final examName = widget.displayName;
+      final examCategoryUpper = widget.exam?.category.name.toUpperCase() ?? '';
+      final packageExamIds = widget.examPackage?.examIds ?? [];
+      
+      debugPrint('[TimeSlotSheet] 🔍 Carico slot per org=${widget.organization.id} (${widget.organization.name}), exam=$examName, date=${date.day}/${date.month}/${date.year}');
       
       // Carica tutti gli slot per questa organizzazione
       final allSlots = await _availabilityService.getAllSlotsForOrganization(widget.organization.id);
       
       debugPrint('[TimeSlotSheet] 📥 Ricevuti ${allSlots.length} slot totali dal DB');
       
-      // Log per capire la distribuzione degli esami e categorie
-      final examCounts = <String, int>{};
-      final categoryCounts = <String, int>{};
-      for (final s in allSlots) {
-        final examId = s.examId ?? 'null';
-        final category = s.examCategory ?? 'null';
-        examCounts[examId] = (examCounts[examId] ?? 0) + 1;
-        categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
-      }
-      debugPrint('[TimeSlotSheet] 📊 Slot per exam_type_id:');
-      for (final entry in examCounts.entries) {
-        debugPrint('   - examId ${entry.key}: ${entry.value} slot ${entry.key == widget.exam.id ? "✓ CERCATO" : ""}');
-      }
-      debugPrint('[TimeSlotSheet] 📊 Slot per exam_category:');
-      final searchCategoryUpper = widget.exam.category.name.toUpperCase();
-      for (final entry in categoryCounts.entries) {
-        final match = entry.key.toUpperCase() == searchCategoryUpper;
-        debugPrint('   - category ${entry.key}: ${entry.value} slot ${match ? "✓ CERCATO" : ""}');
-      }
-      
-      // Filtra per esame e data selezionata
+      // Filtra per esame/pacchetto e data selezionata
       final startOfDay = DateTime(date.year, date.month, date.day);
       final endOfDay = startOfDay.add(const Duration(days: 1));
       
-      // Filtra per:
-      // 1. examId specifico (match esatto)
-      // 2. examCategory corrispondente alla categoria dell'esame cercato
-      // 3. Se examCategory è null, deriva la categoria dall'examId (per slot legacy)
-      // IMPORTANTE: Il confronto deve essere case-insensitive
-      final examCategoryUpper = widget.exam.category.name.toUpperCase();
-      
-      // Helper per verificare se uno slot appartiene alla categoria cercata
-      bool slotMatchesCategory(AvailabilitySlot s) {
-        // Match esatto per examId
-        if (s.examId == widget.exam.id) return true;
-        
-        // Match per examCategory (se valorizzata)
-        if (s.examCategory != null && s.examCategory!.toUpperCase() == examCategoryUpper) {
-          return true;
-        }
-        
-        // Fallback: deriva la categoria dall'examId (per slot legacy senza examCategory)
-        // Lo slot potrebbe essere stato creato per un altro esame della stessa categoria
-        if (s.examCategory == null && s.examId != null && _examIdToCategory.containsKey(s.examId)) {
-          final derivedCategory = _examIdToCategory[s.examId]!.toUpperCase();
-          if (derivedCategory == examCategoryUpper) {
+      // Helper per verificare se uno slot è compatibile con l'esame/pacchetto
+      bool slotMatchesExamOrPackage(AvailabilitySlot s) {
+        // Per singolo esame
+        if (widget.exam != null) {
+          // Match esatto per examId
+          if (s.examId == examId) return true;
+          
+          // Match per examCategory (se valorizzata)
+          if (s.examCategory != null && s.examCategory!.toUpperCase() == examCategoryUpper) {
             return true;
           }
+          
+          // Fallback: deriva la categoria dall'examId (per slot legacy)
+          if (s.examCategory == null && s.examId != null && _examIdToCategory.containsKey(s.examId)) {
+            final derivedCategory = _examIdToCategory[s.examId]!.toUpperCase();
+            if (derivedCategory == examCategoryUpper) {
+              return true;
+            }
+          }
+        }
+        
+        // Per pacchetto: verifica se lo slot copre almeno uno degli esami del pacchetto
+        if (widget.examPackage != null && packageExamIds.isNotEmpty) {
+          if (s.examId != null && packageExamIds.contains(s.examId)) return true;
         }
         
         return false;
       }
       
-      final slotsForExam = allSlots.where(slotMatchesCategory).toList();
-      debugPrint('[TimeSlotSheet] 🔍 Slot per esame ${widget.exam.name} (exact match OR category=$examCategoryUpper OR derived): ${slotsForExam.length}');
+      final slotsForExam = allSlots.where(slotMatchesExamOrPackage).toList();
+      debugPrint('[TimeSlotSheet] 🔍 Slot per $examName: ${slotsForExam.length}');
       
       final availableSlots = slotsForExam.where((s) => s.isAvailable).toList();
       debugPrint('[TimeSlotSheet] 🔍 Slot disponibili (is_available=true): ${availableSlots.length}');

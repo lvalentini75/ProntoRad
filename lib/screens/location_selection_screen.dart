@@ -2,15 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:xraynow/models/exam_type.dart';
+import 'package:xraynow/models/exam_package.dart';
 import 'package:xraynow/models/organization.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:xraynow/theme.dart';
 import 'package:xraynow/services/organization_service.dart';
 
 class LocationSelectionScreen extends StatefulWidget {
-  final ExamType exam;
+  final ExamType? exam;
+  final ExamPackage? examPackage;
 
-  const LocationSelectionScreen({super.key, required this.exam});
+  const LocationSelectionScreen({
+    super.key,
+    this.exam,
+    this.examPackage,
+  }) : assert(exam != null || examPackage != null, 'Either exam or examPackage must be provided');
 
   @override
   State<LocationSelectionScreen> createState() =>
@@ -87,11 +93,14 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
   Future<void> _loadAvailableFacilities() async {
     setState(() => _loadingFacilities = true);
     try {
-      debugPrint('[LocationSelection] Loading facilities for exam ${widget.exam.id}');
+      final examId = widget.exam?.id;
+      final packageId = widget.examPackage?.id;
+      debugPrint('[LocationSelection] Loading facilities for exam=$examId, package=$packageId');
       
-      // Carica strutture che offrono l'esame nella località selezionata
+      // Carica strutture che offrono l'esame/pacchetto nella località selezionata
       final orgs = await _orgService.searchOrganizations(
-        examId: widget.exam.id,
+        examId: examId,
+        packageId: packageId,
         region: _selectedRegion,
         province: _selectedProvince,
         city: _selectedCity,
@@ -187,7 +196,8 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
       context.push(
         '/facility-list',
         extra: {
-          'exam': widget.exam,
+          if (widget.exam != null) 'exam': widget.exam,
+          if (widget.examPackage != null) 'examPackage': widget.examPackage,
           'region': _selectedRegion,
           'province': _selectedProvince,
           'city': _selectedCity,
