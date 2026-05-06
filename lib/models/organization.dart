@@ -20,6 +20,7 @@ class Organization {
   final String city;
   final String province;
   final String region;
+  final String country;
   final String? phone;
   final String? email;
   final String? website;
@@ -28,6 +29,9 @@ class Organization {
   final String? notes;
   final double? latitude;
   final double? longitude;
+  final bool isActive;
+  final double gfrWarningThreshold; // GFR below this value shows warning (default: 60)
+  final double gfrCriticalThreshold; // GFR below this value shows critical alert (default: 30)
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -39,6 +43,7 @@ class Organization {
     required this.city,
     required this.province,
     required this.region,
+    this.country = 'Italia',
     this.phone,
     this.email,
     this.website,
@@ -47,6 +52,9 @@ class Organization {
     this.notes,
     this.latitude,
     this.longitude,
+    this.isActive = true,
+    this.gfrWarningThreshold = 60.0,
+    this.gfrCriticalThreshold = 30.0,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -61,6 +69,8 @@ class Organization {
       'city': city,
       'province': province,
       'region': region,
+      'country': country,
+      'is_active': isActive,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -79,6 +89,8 @@ class Organization {
     if (notes != null) map['notes'] = notes;
     if (latitude != null) map['latitude'] = latitude;
     if (longitude != null) map['longitude'] = longitude;
+    map['gfr_warning_threshold'] = gfrWarningThreshold;
+    map['gfr_critical_threshold'] = gfrCriticalThreshold;
     
     return map;
   }
@@ -94,6 +106,7 @@ class Organization {
     city: json['city'] as String? ?? '',
     province: json['province'] as String? ?? '',
     region: json['region'] as String? ?? '',
+    country: json['country'] as String? ?? 'Italia',
     phone: json['phone'] as String?,
     email: json['email'] as String?,
     website: json['website'] as String?,
@@ -102,6 +115,9 @@ class Organization {
     notes: json['notes'] as String?,
     latitude: json['latitude'] != null ? (json['latitude'] as num).toDouble() : null,
     longitude: json['longitude'] != null ? (json['longitude'] as num).toDouble() : null,
+    isActive: json['is_active'] as bool? ?? true,
+    gfrWarningThreshold: json['gfr_warning_threshold'] != null ? (json['gfr_warning_threshold'] as num).toDouble() : 60.0,
+    gfrCriticalThreshold: json['gfr_critical_threshold'] != null ? (json['gfr_critical_threshold'] as num).toDouble() : 30.0,
     createdAt: json['created_at'] != null 
         ? DateTime.parse(json['created_at'] as String) 
         : DateTime.now(),
@@ -118,6 +134,7 @@ class Organization {
     String? city,
     String? province,
     String? region,
+    String? country,
     String? phone,
     String? email,
     String? website,
@@ -126,6 +143,9 @@ class Organization {
     String? notes,
     double? latitude,
     double? longitude,
+    bool? isActive,
+    double? gfrWarningThreshold,
+    double? gfrCriticalThreshold,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Organization(
@@ -136,6 +156,7 @@ class Organization {
     city: city ?? this.city,
     province: province ?? this.province,
     region: region ?? this.region,
+    country: country ?? this.country,
     phone: phone ?? this.phone,
     email: email ?? this.email,
     website: website ?? this.website,
@@ -144,6 +165,9 @@ class Organization {
     notes: notes ?? this.notes,
     latitude: latitude ?? this.latitude,
     longitude: longitude ?? this.longitude,
+    isActive: isActive ?? this.isActive,
+    gfrWarningThreshold: gfrWarningThreshold ?? this.gfrWarningThreshold,
+    gfrCriticalThreshold: gfrCriticalThreshold ?? this.gfrCriticalThreshold,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );

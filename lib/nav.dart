@@ -17,6 +17,7 @@ import 'package:xraynow/screens/support_screen.dart';
 import 'package:xraynow/screens/notifications_screen.dart';
 import 'package:xraynow/models/exam_type.dart';
 import 'package:xraynow/models/booking.dart';
+import 'package:xraynow/models/availability_slot.dart';
 import 'package:xraynow/supabase/supabase_config.dart';
 import 'package:xraynow/screens/mobile_app_shell.dart';
 import 'package:xraynow/screens/web/app_shell.dart';
@@ -256,6 +257,7 @@ class AppRouter {
                 child: FacilityListScreen(
                   exam: params['exam'] as ExamType?,
                   examPackage: params['examPackage'] as ExamPackage?,
+                  country: params['country'] as String? ?? 'Italia',
                   region: params['region'] as String,
                   province: params['province'] as String,
                   city: params['city'] as String,
@@ -281,6 +283,10 @@ class AppRouter {
                   urgency: params['urgency'] as UrgencyLevel,
                   slotId: params['slotId'] as String?,
                   price: params['price'] as double?,
+                  // Parametri prerequisito (opzionali)
+                  prerequisiteExam: params['prerequisiteExam'] as ExamType?,
+                  prerequisiteSlot: params['prerequisiteSlot'] as AvailabilitySlot?,
+                  prerequisiteTime: params['prerequisiteTime'] as DateTime?,
                 ),
               );
             },

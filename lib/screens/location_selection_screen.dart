@@ -7,6 +7,7 @@ import 'package:xraynow/models/organization.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:xraynow/theme.dart';
 import 'package:xraynow/services/organization_service.dart';
+import 'package:xraynow/data/locations.dart';
 
 class LocationSelectionScreen extends StatefulWidget {
   final ExamType? exam;
@@ -26,6 +27,7 @@ class LocationSelectionScreen extends StatefulWidget {
 class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
   final OrganizationService _orgService = OrganizationService();
   
+  String _selectedCountry = 'Svizzera';
   String? _selectedRegion;
   String? _selectedProvince;
   String? _selectedCity;
@@ -35,54 +37,15 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
   List<Organization> _availableFacilities = [];
   bool _loadingFacilities = false;
 
-  final List<String> _regions = [
-    'Lazio',
-    'Lombardia',
-    'Campania',
-    'Piemonte',
-    'Toscana',
-    'Veneto',
-    'Emilia-Romagna',
-    'Sicilia',
-  ];
-
-  // Province per regione - Lista completa italiana
-  static const Map<String, List<String>> _provincesByRegion = {
-    'Abruzzo': ['Chieti', 'L\'Aquila', 'Pescara', 'Teramo'],
-    'Basilicata': ['Matera', 'Potenza'],
-    'Calabria': ['Catanzaro', 'Cosenza', 'Crotone', 'Reggio Calabria', 'Vibo Valentia'],
-    'Campania': ['Avellino', 'Benevento', 'Caserta', 'Napoli', 'Salerno'],
-    'Emilia-Romagna': ['Bologna', 'Ferrara', 'Forlì-Cesena', 'Modena', 'Parma', 'Piacenza', 'Ravenna', 'Reggio Emilia', 'Rimini'],
-    'Friuli-Venezia Giulia': ['Gorizia', 'Pordenone', 'Trieste', 'Udine'],
-    'Lazio': ['Frosinone', 'Latina', 'Rieti', 'Roma', 'Viterbo'],
-    'Liguria': ['Genova', 'Imperia', 'La Spezia', 'Savona'],
-    'Lombardia': ['Bergamo', 'Brescia', 'Como', 'Cremona', 'Lecco', 'Lodi', 'Mantova', 'Milano', 'Monza e Brianza', 'Pavia', 'Sondrio', 'Varese'],
-    'Marche': ['Ancona', 'Ascoli Piceno', 'Fermo', 'Macerata', 'Pesaro e Urbino'],
-    'Molise': ['Campobasso', 'Isernia'],
-    'Piemonte': ['Alessandria', 'Asti', 'Biella', 'Cuneo', 'Novara', 'Torino', 'Verbano-Cusio-Ossola', 'Vercelli'],
-    'Puglia': ['Bari', 'Barletta-Andria-Trani', 'Brindisi', 'Foggia', 'Lecce', 'Taranto'],
-    'Sardegna': ['Cagliari', 'Carbonia-Iglesias', 'Medio Campidano', 'Nuoro', 'Ogliastra', 'Olbia-Tempio', 'Oristano', 'Sassari'],
-    'Sicilia': ['Agrigento', 'Caltanissetta', 'Catania', 'Enna', 'Messina', 'Palermo', 'Ragusa', 'Siracusa', 'Trapani'],
-    'Toscana': ['Arezzo', 'Firenze', 'Grosseto', 'Livorno', 'Lucca', 'Massa-Carrara', 'Pisa', 'Pistoia', 'Prato', 'Siena'],
-    'Trentino-Alto Adige': ['Bolzano', 'Trento'],
-    'Umbria': ['Perugia', 'Terni'],
-    'Valle d\'Aosta': ['Aosta'],
-    'Veneto': ['Belluno', 'Padova', 'Rovigo', 'Treviso', 'Venezia', 'Verona', 'Vicenza'],
-  };
-
-  final Map<String, List<String>> _cities = {
-    'Roma': ['Roma', 'Fiumicino', 'Guidonia Montecelio', 'Anzio'],
-    'Milano': [
-      'Milano',
-      'Milano Centro',
-      'Sesto San Giovanni',
-      'Cinisello Balsamo',
-      'San Donato Milanese'
-    ],
-    'Napoli': ['Napoli', 'Pozzuoli', 'Torre del Greco', 'Casoria'],
-    'Torino': ['Torino', 'Moncalieri', 'Collegno', 'Rivoli'],
-    'Firenze': ['Firenze', 'Scandicci', 'Sesto Fiorentino', 'Empoli'],
-  };
+  List<String> get _availableRegions => Locations.getRegionsByCountry(_selectedCountry);
+  
+  List<String> get _availableProvinces => _selectedRegion != null 
+      ? Locations.getProvincesByRegion(_selectedRegion, country: _selectedCountry)
+      : [];
+  
+  List<String> get _availableCities => _selectedProvince != null
+      ? Locations.getCitiesByProvince(_selectedProvince, country: _selectedCountry)
+      : [];
 
   @override
   void initState() {
@@ -101,6 +64,7 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
       final orgs = await _orgService.searchOrganizations(
         examId: examId,
         packageId: packageId,
+        country: _selectedCountry,
         region: _selectedRegion,
         province: _selectedProvince,
         city: _selectedCity,
@@ -131,9 +95,9 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
         });
       }
       
-      // Limita a 5 strutture per brevità
+      // Mostra tutte le strutture disponibili
       setState(() {
-        _availableFacilities = orgs.take(5).toList();
+        _availableFacilities = orgs;
         _loadingFacilities = false;
       });
       
@@ -190,17 +154,21 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
   }
 
   void _continueToFacilities() {
-    if (_selectedRegion != null &&
-        _selectedProvince != null &&
-        _selectedCity != null) {
+    // Per la Svizzera: richiedi solo cantone (distretto e città opzionali)
+    // Per l'Italia: richiedi regione, provincia e città
+    final hasRequiredFields = _selectedRegion != null &&
+        (_selectedCountry == 'Svizzera' || (_selectedProvince != null && _selectedCity != null));
+    
+    if (hasRequiredFields) {
       context.push(
         '/facility-list',
         extra: {
           if (widget.exam != null) 'exam': widget.exam,
           if (widget.examPackage != null) 'examPackage': widget.examPackage,
+          'country': _selectedCountry,
           'region': _selectedRegion,
-          'province': _selectedProvince,
-          'city': _selectedCity,
+          if (_selectedProvince != null) 'province': _selectedProvince,
+          if (_selectedCity != null) 'city': _selectedCity,
           if (_userLat != null && _userLon != null) 'userLat': _userLat,
           if (_userLat != null && _userLon != null) 'userLon': _userLon,
         },
@@ -309,12 +277,17 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
                           ),
                           const SizedBox(height: 20),
 
+                          // Country dropdown
+                          _buildDropdownLabel('Seleziona Paese'),
+                          _buildCountryDropdown(),
+                          const SizedBox(height: 16),
+
                           // Region dropdown
-                          _buildDropdownLabel('Seleziona Regione'),
+                          _buildDropdownLabel(_selectedCountry == 'Svizzera' ? 'Seleziona Cantone' : 'Seleziona Regione'),
                           _buildDropdown(
                             value: _selectedRegion,
-                            hint: 'Lombardia',
-                            items: _regions,
+                            hint: _selectedCountry == 'Svizzera' ? 'Ticino' : 'Lombardia',
+                            items: _availableRegions,
                             onChanged: (value) {
                               setState(() {
                                 _selectedRegion = value;
@@ -327,13 +300,11 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
                           const SizedBox(height: 16),
 
                           // Province dropdown
-                          _buildDropdownLabel('Seleziona Provincia'),
+                          _buildDropdownLabel(_selectedCountry == 'Svizzera' ? 'Seleziona Distretto (opzionale)' : 'Seleziona Provincia'),
                           _buildDropdown(
                             value: _selectedProvince,
-                            hint: 'Milano',
-                            items: _selectedRegion != null
-                                ? _provincesByRegion[_selectedRegion!] ?? []
-                                : [],
+                            hint: _selectedCountry == 'Svizzera' ? 'Tutti i distretti' : 'Milano',
+                            items: _availableProvinces,
                             onChanged: (value) {
                               setState(() {
                                 _selectedProvince = value;
@@ -346,13 +317,11 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
                           const SizedBox(height: 16),
 
                           // City dropdown
-                          _buildDropdownLabel('Seleziona Comune'),
+                          _buildDropdownLabel('Seleziona Comune${_selectedCountry == 'Svizzera' ? ' (opzionale)' : ''}'),
                           _buildDropdown(
                             value: _selectedCity,
-                            hint: 'Milano Centro',
-                            items: _selectedProvince != null
-                                ? _cities[_selectedProvince!] ?? []
-                                : [],
+                            hint: _selectedCountry == 'Svizzera' ? 'Tutti i comuni' : 'Milano',
+                            items: _availableCities,
                             onChanged: (value) {
                               setState(() {
                                 _selectedCity = value;
@@ -457,8 +426,7 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
 
                     // Search button
                     if (_selectedRegion != null &&
-                        _selectedProvince != null &&
-                        _selectedCity != null)
+                        (_selectedCountry == 'Svizzera' || (_selectedProvince != null && _selectedCity != null)))
                       ElevatedButton(
                         onPressed: _continueToFacilities,
                         style: ElevatedButton.styleFrom(
@@ -542,6 +510,46 @@ class _LocationSelectionScreenState extends State<LocationSelectionScreen> {
                   ))
               .toList(),
           onChanged: enabled ? onChanged : null,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCountryDropdown() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedCountry,
+          isExpanded: true,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          borderRadius: BorderRadius.circular(12),
+          items: Locations.countries.map((country) => DropdownMenuItem(
+            value: country,
+            child: Row(
+              children: [
+                Text(country == 'Italia' ? '🇮🇹' : '🇨🇭', style: const TextStyle(fontSize: 20)),
+                const SizedBox(width: 12),
+                Text(
+                  country,
+                  style: const TextStyle(fontSize: 15),
+                ),
+              ],
+            ),
+          )).toList(),
+          onChanged: (value) {
+            setState(() {
+              _selectedCountry = value ?? 'Italia';
+              _selectedRegion = null;
+              _selectedProvince = null;
+              _selectedCity = null;
+            });
+            _loadAvailableFacilities();
+          },
         ),
       ),
     );

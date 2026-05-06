@@ -32,6 +32,8 @@ class _HospitalProfileScreenState extends State<HospitalProfileScreen> {
   late TextEditingController _websiteController;
   late TextEditingController _vatNumberController;
   late TextEditingController _notesController;
+  late TextEditingController _gfrWarningController;
+  late TextEditingController _gfrCriticalController;
   OrganizationType _selectedType = OrganizationType.hospital;
 
   @override
@@ -52,6 +54,8 @@ class _HospitalProfileScreenState extends State<HospitalProfileScreen> {
     _websiteController = TextEditingController();
     _vatNumberController = TextEditingController();
     _notesController = TextEditingController();
+    _gfrWarningController = TextEditingController();
+    _gfrCriticalController = TextEditingController();
   }
 
   @override
@@ -66,6 +70,8 @@ class _HospitalProfileScreenState extends State<HospitalProfileScreen> {
     _websiteController.dispose();
     _vatNumberController.dispose();
     _notesController.dispose();
+    _gfrWarningController.dispose();
+    _gfrCriticalController.dispose();
     super.dispose();
   }
 
@@ -112,6 +118,8 @@ class _HospitalProfileScreenState extends State<HospitalProfileScreen> {
     _websiteController.text = org.website ?? '';
     _vatNumberController.text = org.vatNumber ?? '';
     _notesController.text = org.notes ?? '';
+    _gfrWarningController.text = org.gfrWarningThreshold.toString();
+    _gfrCriticalController.text = org.gfrCriticalThreshold.toString();
     _selectedType = org.orgType;
   }
 
@@ -133,6 +141,8 @@ class _HospitalProfileScreenState extends State<HospitalProfileScreen> {
         website: _websiteController.text.trim().isEmpty ? null : _websiteController.text.trim(),
         vatNumber: _vatNumberController.text.trim().isEmpty ? null : _vatNumberController.text.trim(),
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+        gfrWarningThreshold: double.tryParse(_gfrWarningController.text.trim()) ?? 60.0,
+        gfrCriticalThreshold: double.tryParse(_gfrCriticalController.text.trim()) ?? 30.0,
         updatedAt: DateTime.now().toUtc(),
       );
       
@@ -387,6 +397,107 @@ class _HospitalProfileScreenState extends State<HospitalProfileScreen> {
                       label: 'Note e informazioni aggiuntive',
                       enabled: _editing,
                       maxLines: 4,
+                    ),
+
+                    const Divider(height: 48),
+
+                    // Configurazione GFR per esami TAC
+                    Text('⚠️ Soglie GFR per Esami TAC',
+                      style: context.textStyles.titleLarge?.bold),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Configura le soglie di filtrato glomerulare (GFR) per identificare pazienti a rischio durante prenotazioni TAC con contrasto',
+                      style: context.textStyles.bodyMedium?.withColor(colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _gfrWarningController,
+                            label: 'Soglia Warning (mL/min/1.73m²) *',
+                            enabled: _editing,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: (val) {
+                              if (val?.trim().isEmpty ?? true) return 'Campo obbligatorio';
+                              final value = double.tryParse(val!.trim());
+                              if (value == null) return 'Valore non valido';
+                              if (value < 0 || value > 200) return 'Range: 0-200';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _gfrCriticalController,
+                            label: 'Soglia Critica (mL/min/1.73m²) *',
+                            enabled: _editing,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: (val) {
+                              if (val?.trim().isEmpty ?? true) return 'Campo obbligatorio';
+                              final value = double.tryParse(val!.trim());
+                              if (value == null) return 'Valore non valido';
+                              if (value < 0 || value > 200) return 'Range: 0-200';
+                              final warning = double.tryParse(_gfrWarningController.text.trim());
+                              if (warning != null && value > warning) {
+                                return 'Deve essere ≤ soglia warning';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: colorScheme.outline.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline, 
+                            size: 20, 
+                            color: colorScheme.primary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Come funziona:',
+                                  style: context.textStyles.labelLarge?.semiBold),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '• GFR < Soglia Critica: Alert rosso 🔴 (controindicazione)',
+                                  style: context.textStyles.bodySmall,
+                                ),
+                                Text(
+                                  '• GFR < Soglia Warning: Icona gialla ⚠️ (richiede attenzione)',
+                                  style: context.textStyles.bodySmall,
+                                ),
+                                Text(
+                                  '• GFR ≥ Soglia Warning: Nessun alert',
+                                  style: context.textStyles.bodySmall,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Valori consigliati: Warning 60, Critica 30 mL/min/1.73m²',
+                                  style: context.textStyles.bodySmall?.semiBold
+                                    .withColor(colorScheme.primary),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
 
                     // Action buttons

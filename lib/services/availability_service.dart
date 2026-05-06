@@ -7,6 +7,38 @@ import 'package:xraynow/services/audit_log_service.dart';
 import 'package:xraynow/services/debug_log_service.dart';
 
 class AvailabilityService {
+  final _debugLog = DebugLogService();
+  
+  /// Debug: Verifica se l'utente corrente può inserire slot per un'organizzazione
+  /// Richiede che la funzione debug_user_can_insert_slot sia stata creata nel database
+  Future<Map<String, dynamic>?> debugCanInsertSlot(String organizationId) async {
+    try {
+      final result = await SupabaseConfig.client
+          .rpc('debug_user_can_insert_slot', params: {'p_organization_id': organizationId});
+      
+      if (result != null && (result as List).isNotEmpty) {
+        final row = result.first as Map<String, dynamic>;
+        _debugLog.info('AvailabilityService', '''
+🔍 DEBUG INSERT CHECK:
+  - can_insert: ${row['can_insert']}
+  - auth_uid: ${row['auth_uid']}
+  - user_email: ${row['user_email']}
+  - user_role: ${row['user_role']}
+  - user_org_id: ${row['user_org_id']}
+  - target_org_id: ${row['target_org_id']}
+  - org_matches: ${row['org_matches']}
+  - has_admin_role: ${row['has_admin_role']}
+''');
+        return row;
+      }
+      _debugLog.warning('AvailabilityService', '⚠️ debug_user_can_insert_slot returned empty result');
+      return null;
+    } catch (e) {
+      _debugLog.warning('AvailabilityService', '⚠️ debug_user_can_insert_slot non disponibile: $e');
+      return null;
+    }
+  }
+  
   /// Ottiene le offerte esami per una struttura
   Future<List<FacilityExamOffering>> getOfferingsForFacility(String facilityId) async {
     try {
@@ -412,9 +444,17 @@ class AvailabilityService {
         query = query.lte('specific_date', endStr);
       }
       
-      // OTTIMIZZAZIONE: Limita i risultati per evitare sovraccarico
+      // Ordina per data per consistenza
+      query = query.order('specific_date', ascending: true);
+      
+      // IMPORTANTE: Supabase ha un limite di default di 1000 record.
+      // Per il calendario annuale, potremmo avere più di 1000 slot.
+      // Se viene passato un limite esplicito, usalo. Altrimenti, imposta un limite alto.
       if (limit != null && limit > 0) {
         query = query.limit(limit);
+      } else {
+        // Limite alto per caricare tutti gli slot dell'anno (max ~5000 slot tipici per un anno)
+        query = query.limit(10000);
       }
       
       final data = await query;
@@ -520,10 +560,46 @@ class AvailabilityService {
   Future<List<AvailabilitySlot>> createSlotsBatch(List<AvailabilitySlot> slots) async {
     if (slots.isEmpty) return [];
     
-    final debugLog = DebugLogService();
     debugPrint('[AvailabilityService] Batch insert di ${slots.length} slot...');
-    debugLog.info('AvailabilityService', '🚀 Batch insert: ${slots.length} slot');
+    _debugLog.info('AvailabilityService', '🚀 Batch insert: ${slots.length} slot');
     final stopwatch = Stopwatch()..start();
+    
+    // DEBUG: Verifica permessi prima dell'insert
+    final orgId = slots.first.organizationId;
+    _debugLog.info('AvailabilityService', '🔍 Verifico permessi per org: $orgId');
+    final debugResult = await debugCanInsertSlot(orgId);
+    
+    if (debugResult != null) {
+      final canInsert = debugResult['can_insert'] == true;
+      final userRole = debugResult['user_role'];
+      final userOrgId = debugResult['user_org_id'];
+      final orgMatches = debugResult['org_matches'];
+      final hasAdminRole = debugResult['has_admin_role'];
+      
+      _debugLog.info('AvailabilityService', '''
+🔐 VERIFICA PERMESSI:
+  - can_insert: $canInsert
+  - Ruolo utente: $userRole
+  - Org utente: $userOrgId
+  - Org target: $orgId
+  - Org coincide: $orgMatches
+  - È admin: $hasAdminRole
+''');
+      
+      if (!canInsert) {
+        _debugLog.error('AvailabilityService', '''
+❌ PERMESSO NEGATO!
+La RLS policy blocca l'inserimento. Possibili cause:
+1. L'utente non ha ruolo org_admin o super_admin (ruolo attuale: $userRole)
+2. L'organization_id dell'utente ($userOrgId) non coincide con quello degli slot ($orgId)
+
+SOLUZIONE: Applica la migrazione 20260505_193216_migration.sql dal pannello Supabase
+''');
+        // CONTINUA COMUNQUE per verificare il comportamento reale
+      }
+    } else {
+      _debugLog.warning('AvailabilityService', '⚠️ Funzione debug non disponibile - procedo comunque');
+    }
     
     try {
       // Prepara tutti i payload
@@ -551,58 +627,104 @@ class AvailabilityService {
       }
       
       if (payloads.isEmpty) {
-        debugLog.warning('AvailabilityService', '⚠️ Nessun payload valido da inserire');
+        _debugLog.warning('AvailabilityService', '⚠️ Nessun payload valido da inserire');
         return [];
       }
       
       // Log del primo payload per debug
-      debugLog.debug('AvailabilityService', '📦 Primo payload: ${payloads.first}');
+      _debugLog.debug('AvailabilityService', '📦 Primo payload: ${payloads.first}');
+      _debugLog.debug('AvailabilityService', '🔑 Organization ID: ${payloads.first['organization_id']}');
       
       // Inserimento batch singolo
-      debugLog.info('AvailabilityService', '📤 Invio ${payloads.length} payloads a Supabase...');
-      final data = await SupabaseConfig.client
-          .from('availability_slots')
-          .insert(payloads)
-          .select();
+      _debugLog.info('AvailabilityService', '📤 Invio ${payloads.length} payloads a Supabase...');
       
-      stopwatch.stop();
-      debugPrint('[AvailabilityService] ✅ Batch insert completato in ${stopwatch.elapsedMilliseconds}ms');
+      // Log utente autenticato per debug
+      final authUser = SupabaseConfig.auth.currentUser;
+      _debugLog.info('AvailabilityService', '👤 Auth user: ${authUser?.email ?? "NESSUNO"} (ID: ${authUser?.id ?? "-"})');
       
-      final created = <AvailabilitySlot>[];
-      for (final row in (data as List)) {
-        try {
-          created.add(AvailabilitySlot.fromJson(row as Map<String, dynamic>));
-        } catch (e) {
-          debugPrint('[AvailabilityService] ⚠️ Errore parsing slot: $e');
-        }
-      }
-      
-      debugLog.info('AvailabilityService', '✅ Batch completato: ${created.length}/${payloads.length} creati in ${stopwatch.elapsedMilliseconds}ms');
-      
-      // Log audit per il batch
       try {
-        await AuditLogService.log(
-          action: 'batch_create',
-          table: 'availability_slots',
-          recordId: 'batch_${created.length}',
-          changes: {'count': created.length, 'first_date': slots.first.startTime.toIso8601String()},
-        );
-      } catch (_) {}
-      
-      return created;
+        final data = await SupabaseConfig.client
+            .from('availability_slots')
+            .insert(payloads)
+            .select();
+        
+        stopwatch.stop();
+        debugPrint('[AvailabilityService] ✅ Batch insert completato in ${stopwatch.elapsedMilliseconds}ms');
+        _debugLog.info('AvailabilityService', '📥 Risposta Supabase: ${(data as List).length} righe inserite');
+        
+        final created = <AvailabilitySlot>[];
+        for (final row in data) {
+          try {
+            created.add(AvailabilitySlot.fromJson(row as Map<String, dynamic>));
+          } catch (e) {
+            debugPrint('[AvailabilityService] ⚠️ Errore parsing slot: $e');
+            _debugLog.warning('AvailabilityService', '⚠️ Errore parsing: $e');
+          }
+        }
+        
+        _debugLog.info('AvailabilityService', '✅ Batch completato: ${created.length}/${payloads.length} creati in ${stopwatch.elapsedMilliseconds}ms');
+        
+        // Se non sono stati creati slot, segnala il problema
+        if (created.isEmpty && payloads.isNotEmpty) {
+          _debugLog.error('AvailabilityService', '❌ ATTENZIONE: Nessuno slot creato! Possibile problema RLS policy');
+          debugPrint('[AvailabilityService] ❌ NESSUNO SLOT CREATO - Verifica RLS policy per availability_slots');
+        }
+        
+        // Log audit per il batch
+        if (created.isNotEmpty) {
+          try {
+            await AuditLogService.log(
+              action: 'batch_create',
+              table: 'availability_slots',
+              recordId: 'batch_${created.length}',
+              changes: {'count': created.length, 'first_date': created.first.startTime.toIso8601String()},
+            );
+          } catch (_) {}
+        }
+        
+        return created;
+      } catch (insertError) {
+        String errorDetails = insertError.toString();
+        String errorCode = '';
+        String errorHint = '';
+        
+        // Estrai dettagli se è PostgrestException
+        if (insertError is PostgrestException) {
+          errorCode = insertError.code ?? '';
+          errorDetails = insertError.message;
+          errorHint = insertError.hint ?? '';
+          
+          // Diagnosi RLS
+          if (errorCode == '42501' || errorDetails.toLowerCase().contains('policy')) {
+            _debugLog.error('AvailabilityService', '''
+❌ ERRORE RLS POLICY:
+   Code: $errorCode
+   Message: $errorDetails
+   Hint: $errorHint
+   
+   🔧 SOLUZIONE: Applica la migrazione 20260505_192037_migration.sql
+   dal pannello Supabase per correggere le RLS policy.
+''');
+          }
+        }
+        
+        _debugLog.error('AvailabilityService', '❌ Errore INSERT: $errorDetails (code: $errorCode)');
+        debugPrint('[AvailabilityService] ❌ Errore INSERT: $errorDetails');
+        rethrow;
+      }
     } on PostgrestException catch (e, stackTrace) {
       final errorMsg = 'Batch insert fallito - Code: ${e.code}, Message: ${e.message}';
-      debugLog.error('AvailabilityService', errorMsg, error: e.details ?? e.message, stackTrace: stackTrace);
+      _debugLog.error('AvailabilityService', errorMsg, error: e.details ?? e.message, stackTrace: stackTrace);
       debugPrint('[AvailabilityService] ❌ $errorMsg');
       debugPrint('  • code: ${e.code}');
       if (e.details != null) debugPrint('  • details: ${e.details}');
       if (e.hint != null) debugPrint('  • hint: ${e.hint}');
       
       // Fallback: prova con schema TIME+DATE
-      debugLog.info('AvailabilityService', '🔄 Tentativo fallback con schema TIME+DATE...');
+      _debugLog.info('AvailabilityService', '🔄 Tentativo fallback con schema TIME+DATE...');
       return _createSlotsBatchFallback(slots);
     } catch (e, stackTrace) {
-      debugLog.error('AvailabilityService', 'Errore generico batch insert', error: e, stackTrace: stackTrace);
+      _debugLog.error('AvailabilityService', 'Errore generico batch insert', error: e, stackTrace: stackTrace);
       debugPrint('[AvailabilityService] ❌ Errore generico batch: $e');
       return [];
     }
@@ -610,7 +732,6 @@ class AvailabilityService {
   
   /// Fallback per batch insert con schema TIME+DATE separati
   Future<List<AvailabilitySlot>> _createSlotsBatchFallback(List<AvailabilitySlot> slots) async {
-    final debugLog = DebugLogService();
     try {
       final payloads = <Map<String, dynamic>>[];
       for (final slot in slots) {
@@ -638,11 +759,11 @@ class AvailabilityService {
       }
       
       if (payloads.isEmpty) {
-        debugLog.warning('AvailabilityService', '⚠️ Fallback: nessun payload valido');
+        _debugLog.warning('AvailabilityService', '⚠️ Fallback: nessun payload valido');
         return [];
       }
       
-      debugLog.debug('AvailabilityService', '📦 Fallback primo payload: ${payloads.first}');
+      _debugLog.debug('AvailabilityService', '📦 Fallback primo payload: ${payloads.first}');
       
       final data = await SupabaseConfig.client
           .from('availability_slots')
@@ -658,15 +779,15 @@ class AvailabilityService {
         }
       }
       
-      debugLog.info('AvailabilityService', '✅ Fallback completato: ${created.length}/${payloads.length} creati');
+      _debugLog.info('AvailabilityService', '✅ Fallback completato: ${created.length}/${payloads.length} creati');
       return created;
     } on PostgrestException catch (e, stackTrace) {
       final errorMsg = 'Fallback fallito - Code: ${e.code}, Msg: ${e.message}';
-      debugLog.error('AvailabilityService', errorMsg, error: e.details ?? e.message, stackTrace: stackTrace);
+      _debugLog.error('AvailabilityService', errorMsg, error: e.details ?? e.message, stackTrace: stackTrace);
       debugPrint('[AvailabilityService] ❌ $errorMsg');
       return [];
     } catch (e, stackTrace) {
-      debugLog.error('AvailabilityService', 'Fallback errore generico', error: e, stackTrace: stackTrace);
+      _debugLog.error('AvailabilityService', 'Fallback errore generico', error: e, stackTrace: stackTrace);
       debugPrint('[AvailabilityService] ❌ Fallback batch failed: $e');
       return [];
     }

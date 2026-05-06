@@ -178,7 +178,20 @@ class _AvailabilityManagementScreenState extends State<AvailabilityManagementScr
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Disponibilità', style: context.textStyles.titleLarge?.bold),
-                Text('Ospedale Test', style: context.textStyles.labelSmall?.withColor(Colors.grey.shade600)),
+                Builder(
+                  builder: (context) {
+                    final org = SupabaseAuthManager.instance.cachedOrganization;
+                    final orgName = org != null ? (org['name'] as String?) ?? 'Organizzazione sconosciuta' : 'NESSUNA ORGANIZZAZIONE';
+                    final hasOrg = org != null;
+                    return Text(
+                      orgName, 
+                      style: context.textStyles.labelSmall?.copyWith(
+                        color: hasOrg ? Colors.grey.shade600 : Colors.red,
+                        fontWeight: hasOrg ? FontWeight.normal : FontWeight.bold,
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ],
@@ -221,10 +234,64 @@ class _AvailabilityManagementScreenState extends State<AvailabilityManagementScr
         );
       
       case LoadingState.success:
+        final profile = SupabaseAuthManager.instance.cachedProfile;
+        final org = SupabaseAuthManager.instance.cachedOrganization;
+        final hasValidPermissions = profile != null && 
+                                    org != null && 
+                                    (profile.role == 'org_admin' || profile.role == 'super_admin') &&
+                                    (profile.organizationId == (org['id'] as String?) || profile.role == 'super_admin');
+        
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Warning banner se l'utente non ha permessi corretti
+              if (!hasValidPermissions) ...[
+                Container(
+                  margin: AppSpacing.paddingMd,
+                  padding: AppSpacing.paddingMd,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade300),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '⚠️ PERMESSI INSUFFICIENTI',
+                              style: context.textStyles.titleSmall?.bold.withColor(Colors.red.shade900),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              profile == null 
+                                ? 'Profilo utente non caricato.' 
+                                : org == null 
+                                  ? 'Nessuna organizzazione associata al tuo account.'
+                                  : profile.role == 'end_user'
+                                    ? 'Il tuo ruolo (${profile.role}) non ha permessi per creare slot. Contatta un amministratore.'
+                                    : 'L\'organizzazione del tuo profilo non coincide con quella selezionata.',
+                              style: context.textStyles.bodySmall?.withColor(Colors.red.shade800),
+                            ),
+                            if (profile != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Email: ${profile.email} | Ruolo: ${profile.role} | Org ID: ${profile.organizationId ?? "NESSUNA"}',
+                                style: context.textStyles.labelSmall?.withColor(Colors.red.shade700),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               _buildCreationSection(),
               const SizedBox(height: AppSpacing.lg),
               _buildCalendarSection(),
@@ -346,26 +413,68 @@ class _AvailabilityManagementScreenState extends State<AvailabilityManagementScr
   }
   
   Widget _buildCategoryFilters() {
-    return Row(
+    // Calcola conteggi per categoria
+    final categoryCounts = <String, int>{};
+    for (final slot in _allSlots) {
+      if (slot.startTime.year != _calendarYear) continue;
+      String? cat = slot.examCategory?.toUpperCase();
+      if (cat == null && slot.examId != null) {
+        final exam = _exams.firstWhere((e) => e.id == slot.examId, orElse: () => _exams.first);
+        cat = _getExamCategoryFromName(exam.name);
+      }
+      if (cat != null) {
+        categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+      }
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildCategoryPill('RM', LightModeColors.rmColor),
-        const SizedBox(width: 6),
-        _buildCategoryPill('TAC', LightModeColors.tacColor),
-        const SizedBox(width: 6),
-        _buildCategoryPill('ECO', LightModeColors.ecoColor),
-        const SizedBox(width: 6),
-        _buildCategoryPill('RX', LightModeColors.rxColor),
+        Row(
+          children: [
+            _buildCategoryPillWithCount('RM', LightModeColors.rmColor, categoryCounts['RM'] ?? 0),
+            const SizedBox(width: 6),
+            _buildCategoryPillWithCount('TAC', LightModeColors.tacColor, categoryCounts['TAC'] ?? 0),
+            const SizedBox(width: 6),
+            _buildCategoryPillWithCount('ECO', LightModeColors.ecoColor, categoryCounts['ECO'] ?? 0),
+            const SizedBox(width: 6),
+            _buildCategoryPillWithCount('RX', LightModeColors.rxColor, categoryCounts['RX'] ?? 0),
+          ],
+        ),
+        if (categoryCounts.values.every((c) => c == 0)) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Nessuno slot creato per il $_calendarYear. Usa il form sopra per creare disponibilità.',
+                    style: context.textStyles.bodySmall?.copyWith(color: Colors.orange.shade800),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
   
-  Widget _buildCategoryPill(String category, Color color) {
+  Widget _buildCategoryPillWithCount(String category, Color color, int count) {
     final isSelected = _selectedExamCategory == category;
     return InkWell(
       onTap: () => setState(() => _selectedExamCategory = isSelected ? null : category),
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected ? color : Colors.white,
           border: Border.all(color: isSelected ? color : Colors.grey.shade300, width: 1.5),
@@ -384,6 +493,22 @@ class _AvailabilityManagementScreenState extends State<AvailabilityManagementScr
               style: context.textStyles.labelMedium?.copyWith(
                 color: isSelected ? Colors.white : Colors.grey.shade700,
                 fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.white.withValues(alpha: 0.3) : color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: context.textStyles.labelSmall?.copyWith(
+                  color: isSelected ? Colors.white : color,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                ),
               ),
             ),
           ],
@@ -862,9 +987,38 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
   
   @override
   Widget build(BuildContext context) {
+    // Log stato organizzazione per debug
+    final org = SupabaseAuthManager.instance.cachedOrganization;
+    final profile = SupabaseAuthManager.instance.cachedProfile;
+    _debugLog.debug('RecurringCreator', '🏥 Org: ${org?['name'] ?? "NESSUNA"}, Profile: ${profile?.email ?? "NO"}');
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Debug banner se manca organizzazione
+        if (org == null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red.shade300),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning, color: Colors.red.shade700),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '⚠️ Nessuna organizzazione associata al profilo. Impossibile creare slot.',
+                    style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        
         _buildWeekdaySelector(),
         const SizedBox(height: AppSpacing.md),
         
@@ -983,7 +1137,7 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
           DropdownButtonFormField<String>(
             value: _selectedExamId,
             decoration: InputDecoration(
-              hintText: 'RM Cervello',
+              hintText: 'Seleziona esame...',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
@@ -991,7 +1145,10 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
               value: e.id,
               child: Text(e.name, overflow: TextOverflow.ellipsis),
             )).toList(),
-            onChanged: (value) => setState(() => _selectedExamId = value),
+            onChanged: (value) {
+              _debugLog.info('RecurringCreator', '📋 Esame selezionato: $value');
+              setState(() => _selectedExamId = value);
+            },
           ),
       ],
     );
@@ -1128,6 +1285,9 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
                       _selectedDays.isNotEmpty && 
                       (_useCategoryInsteadOfExam ? _selectedCategory != null : _selectedExamId != null);
     
+    // Debug: mostra perché il pulsante potrebbe essere disabilitato
+    _debugLog.debug('RecurringCreator', 'canCreate=$canCreate, state=$_creationState, days=${_selectedDays.length}, useCat=$_useCategoryInsteadOfExam, examId=$_selectedExamId, category=$_selectedCategory');
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1142,6 +1302,16 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Text('Crea'),
         ),
+        // Debug info
+        if (!canCreate) ...[
+          const SizedBox(height: 8),
+          Text(
+            _useCategoryInsteadOfExam 
+                ? (_selectedCategory == null ? '⚠️ Seleziona una categoria' : '')
+                : (_selectedExamId == null ? '⚠️ Seleziona un esame' : ''),
+            style: const TextStyle(color: Colors.orange, fontSize: 12),
+          ),
+        ],
       ],
     );
   }
@@ -1206,8 +1376,21 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
       final profile = SupabaseAuthManager.instance.cachedProfile;
       final org = SupabaseAuthManager.instance.cachedOrganization;
       
+      // Log dettagliato per debug
+      _debugLog.info('RecurringCreator', '👤 Profilo: ${profile?.email ?? "NESSUNO"}');
+      _debugLog.info('RecurringCreator', '👤 Profilo ID: ${profile?.id ?? "NESSUNO"}');
+      _debugLog.info('RecurringCreator', '👤 Ruolo: ${profile?.role ?? "NESSUNO"}');
+      _debugLog.info('RecurringCreator', '👤 Organization ID nel profilo: ${profile?.organizationId ?? "NESSUNO"}');
+      _debugLog.info('RecurringCreator', '🏥 Org cachedOrganization: ${org?['name'] ?? "NESSUNA"}');
+      _debugLog.info('RecurringCreator', '🏥 Org ID: ${org?['id'] ?? "NESSUNO"}');
+      
       if (profile == null || org == null) {
-        throw Exception('Profilo o organizzazione mancanti');
+        throw Exception('Profilo o organizzazione mancanti (profile: ${profile != null}, org: ${org != null})');
+      }
+      
+      // Verifica ruolo
+      if (profile.role != 'org_admin' && profile.role != 'super_admin') {
+        _debugLog.warning('RecurringCreator', '⚠️ Ruolo utente: ${profile.role} - potrebbe non avere permessi INSERT');
       }
       
       final orgId = org['id'] as String;
@@ -1243,6 +1426,11 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
         
         _debugLog.info('RecurringCreator', '✅ Batch: ${created.length}/${batch.length} creati');
         
+        // Se il batch non ha creato nulla, segnala il problema
+        if (created.isEmpty && batch.isNotEmpty) {
+          _debugLog.warning('RecurringCreator', '⚠️ Batch vuoto! Possibile problema RLS policy');
+        }
+        
         // Piccolo delay per non sovraccaricare il DB
         await Future.delayed(const Duration(milliseconds: 100));
       }
@@ -1251,8 +1439,15 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
       _debugLog.info('RecurringCreator', '✅ TOTALE: $totalSaved/${slots.length} slot creati');
       
       if (mounted) {
+        // Controlla se sono stati creati slot
+        final success = totalSaved > 0;
+        
         setState(() {
-          _statusMessage = '✅ Creazione completata!';
+          if (success) {
+            _statusMessage = '✅ Creazione completata! ($totalSaved slot)';
+          } else {
+            _statusMessage = '❌ Nessuno slot creato - verifica permessi RLS';
+          }
           _progress = 1.0;
         });
         
@@ -1261,16 +1456,74 @@ class _RecurringAvailabilityCreatorState extends State<RecurringAvailabilityCrea
         
         if (mounted) {
           setState(() {
-            _creationState = CreationState.success;
+            _creationState = success ? CreationState.success : CreationState.error;
           });
           
           // Mostra feedback
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ Creati $totalSaved slot'),
-              backgroundColor: totalSaved == slots.length ? Colors.green : Colors.orange,
-            ),
-          );
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ Creati $totalSaved slot'),
+                backgroundColor: totalSaved == slots.length ? Colors.green : Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          } else {
+            // Mostra dialog con istruzioni dettagliate
+            if (mounted) {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Row(
+                    children: [
+                      Icon(Icons.error, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Errore Creazione Slot'),
+                    ],
+                  ),
+                  content: const SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Gli slot non sono stati salvati nel database.',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 12),
+                        Text('Possibili cause:'),
+                        SizedBox(height: 8),
+                        Text('1. L\'utente non ha ruolo "org_admin" o "super_admin"'),
+                        Text('2. L\'organization_id dell\'utente non coincide'),
+                        Text('3. Le RLS policy non sono configurate correttamente'),
+                        SizedBox(height: 16),
+                        Text(
+                          'Soluzione:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 8),
+                        Text('1. Vai nel pannello Supabase (sidebar sinistra)'),
+                        Text('2. Applica la migrazione più recente'),
+                        Text('3. Fai LOGOUT e poi LOGIN di nuovo'),
+                        Text('4. Riprova a creare gli slot'),
+                        SizedBox(height: 12),
+                        Text(
+                          'Controlla anche i Log Debug per maggiori dettagli.',
+                          style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
           
           // Chiama callback per reload DOPO che l'UI è stabile
           await Future.delayed(const Duration(milliseconds: 200));

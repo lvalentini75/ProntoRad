@@ -175,7 +175,7 @@ class DashboardSidebar extends StatelessWidget {
           ),
           _NavItem(
             icon: Icons.link_rounded,
-            label: 'Compatibilità',
+            label: 'Esami in Relazione',
             route: '/dashboard/exam-compatibility',
             isActive: currentPath == '/dashboard/exam-compatibility',
           ),
@@ -293,7 +293,7 @@ class DashboardSidebar extends StatelessWidget {
           ),
           _NavItem(
             icon: Icons.link_rounded,
-            label: 'Compatibilità',
+            label: 'Esami in Relazione',
             route: '/dashboard/exam-compatibility',
             isActive: currentPath == '/dashboard/exam-compatibility',
           ),

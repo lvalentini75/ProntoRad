@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:xraynow/models/exam_type.dart';
 import 'package:xraynow/models/exam_package.dart';
 import 'package:xraynow/models/facility.dart';
+import 'package:xraynow/models/availability_slot.dart';
 import 'package:xraynow/models/booking.dart';
 import 'package:xraynow/services/booking_service.dart';
 import 'package:xraynow/services/exam_service.dart';
@@ -23,6 +24,11 @@ class BookingConfirmationScreen extends StatefulWidget {
   final UrgencyLevel urgency;
   final String? slotId;
   final double? price;
+  
+  // Parametri prerequisito (opzionali)
+  final ExamType? prerequisiteExam;
+  final AvailabilitySlot? prerequisiteSlot;
+  final DateTime? prerequisiteTime;
 
   const BookingConfirmationScreen({
     super.key,
@@ -35,7 +41,13 @@ class BookingConfirmationScreen extends StatefulWidget {
     required this.urgency,
     this.slotId,
     this.price,
+    this.prerequisiteExam,
+    this.prerequisiteSlot,
+    this.prerequisiteTime,
   }) : assert(exam != null || examPackage != null);
+  
+  /// Verifica se c'è un prerequisito da prenotare
+  bool get hasPrerequisite => prerequisiteExam != null && prerequisiteSlot != null;
   
   /// Ottiene il nome da mostrare
   String get displayName => exam?.name ?? examPackage?.name ?? 'Esame';
@@ -165,11 +177,11 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
       debugPrint('[BookingConfirmation]   - slotId: ${widget.slotId ?? "N/A"}');
       
       late final String bookingIdToShow;
+      final gfrValue = _requiresGfr ? double.tryParse(_gfrController.text.trim()) : null;
       
       // If booking a package, create multiple bookings (one per exam)
       if (packageId != null && packageId.isNotEmpty) {
         debugPrint('[BookingConfirmation] 📦 Creazione prenotazioni multiple per pacchetto...');
-        final gfrValue = _requiresGfr ? double.tryParse(_gfrController.text.trim()) : null;
         final createdBookings = await bookingService.createPackageBookings(
           userId: user.id,
           organizationId: widget.organizationId,
@@ -186,9 +198,49 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
         debugPrint('[BookingConfirmation] ✅ Create ${createdBookings.length} prenotazioni per il pacchetto');
         // Show the parent booking (first one)
         bookingIdToShow = createdBookings.first.id;
+      } else if (widget.hasPrerequisite) {
+        // Esame con prerequisito obbligatorio - crea 2 prenotazioni
+        debugPrint('[BookingConfirmation] 🔗 Creazione prenotazioni con prerequisito...');
+        debugPrint('[BookingConfirmation]   1. Prerequisito: ${widget.prerequisiteExam!.name} alle ${widget.prerequisiteTime}');
+        debugPrint('[BookingConfirmation]   2. Esame principale: ${widget.exam?.name} alle ${widget.time}');
+        
+        // 1. Crea prima la prenotazione del prerequisito
+        final prerequisiteBooking = await bookingService.createBookingWithLock(
+          userId: user.id,
+          organizationId: widget.organizationId,
+          examTypeId: widget.prerequisiteExam!.id,
+          bookingDate: widget.date,
+          bookingTime: widget.prerequisiteTime!,
+          slotId: widget.prerequisiteSlot!.id,
+          urgency: widget.urgency,
+          price: 0, // Il prezzo è incluso nell'esame principale
+          notes: 'Prerequisito per: ${widget.exam?.name}',
+          gfrValue: null, // GFR solo per l'esame principale se TAC
+        );
+        debugPrint('[BookingConfirmation] ✅ Prenotazione prerequisito creata: ${prerequisiteBooking.id}');
+        
+        // 2. Crea la prenotazione dell'esame principale collegata al prerequisito
+        final mainBooking = await bookingService.createBookingWithLock(
+          userId: user.id,
+          organizationId: widget.organizationId,
+          examTypeId: examId,
+          parentBookingId: prerequisiteBooking.id, // Collega al prerequisito
+          bookingDate: widget.date,
+          bookingTime: widget.time,
+          slotId: widget.slotId,
+          urgency: widget.urgency,
+          price: widget.price ?? 80.0,
+          notes: 'Preceduto da: ${widget.prerequisiteExam!.name}',
+          gfrValue: gfrValue,
+        );
+        
+        debugPrint('[BookingConfirmation] ✅ Prenotazione principale creata: ${mainBooking.id}');
+        debugPrint('[BookingConfirmation] ✅ Collegata al prerequisito: ${prerequisiteBooking.id}');
+        
+        // Mostra la prenotazione principale (che ha il link al prerequisito)
+        bookingIdToShow = mainBooking.id;
       } else {
-        // Single exam booking
-        final gfrValue = _requiresGfr ? double.tryParse(_gfrController.text.trim()) : null;
+        // Single exam booking (senza prerequisito)
         final createdBooking = await bookingService.createBookingWithLock(
           userId: user.id,
           organizationId: widget.organizationId,
@@ -209,10 +261,17 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
 
       if (mounted) {
         final isPackage = packageId != null && packageId.isNotEmpty;
+        final hasPrereq = widget.hasPrerequisite;
+        String successMsg;
+        if (isPackage) {
+          successMsg = '✅ Prenotazioni del pacchetto create con successo!';
+        } else if (hasPrereq) {
+          successMsg = '✅ 2 prenotazioni create con successo!';
+        } else {
+          successMsg = '✅ Prenotazione inserita con successo!';
+        }
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(isPackage 
-            ? '✅ Prenotazioni del pacchetto create con successo!' 
-            : '✅ Prenotazione inserita con successo!'),
+          content: Text(successMsg),
           backgroundColor: Colors.green,
           duration: const Duration(milliseconds: 800),
         ));
@@ -240,6 +299,100 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
     final months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
     final timeStr = '${widget.time.hour.toString().padLeft(2, '0')}:${widget.time.minute.toString().padLeft(2, '0')}';
     return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]} ${date.year}, $timeStr';
+  }
+  
+  String _formatDateOnly(DateTime date) {
+    final weekdays = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+    final months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+    return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+  
+  Widget _buildExamSummaryRow({
+    required String number,
+    required String examName,
+    required String category,
+    required DateTime time,
+    required bool isPrerequisite,
+  }) {
+    final timeStr = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: isPrerequisite 
+                ? Colors.orange.shade100 
+                : LightModeColors.lightPrimary.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              number,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isPrerequisite 
+                    ? Colors.orange.shade800 
+                    : LightModeColors.lightPrimary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$category - $examName',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                  if (isPrerequisite)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Prerequisito',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.access_time, size: 14, color: Colors.grey.shade500),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Ore $timeStr',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -292,51 +445,97 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: const Color(0xFFE5E5EA)),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      // Se c'è un prerequisito, mostra entrambi gli esami
+                      if (widget.hasPrerequisite) ...[
+                        Row(
                           children: [
+                            Icon(Icons.link, color: LightModeColors.lightPrimary, size: 20),
+                            const SizedBox(width: 8),
                             Text(
-                              '${widget.categoryLabel} - ${widget.displayName}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                color: Colors.black,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              widget.organizationName,
+                              'Prenotazione con Prerequisito',
                               style: TextStyle(
+                                fontWeight: FontWeight.bold,
                                 fontSize: 14,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _formatDate(widget.date),
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade600,
+                                color: LightModeColors.lightPrimary,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: LightModeColors.lightPrimary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
+                        const SizedBox(height: 12),
+                        // 1. Prerequisito
+                        _buildExamSummaryRow(
+                          number: '1',
+                          examName: widget.prerequisiteExam!.name,
+                          category: widget.prerequisiteExam!.category.name.toUpperCase(),
+                          time: widget.prerequisiteTime!,
+                          isPrerequisite: true,
                         ),
-                        child: Icon(
-                          Icons.calendar_month,
-                          color: LightModeColors.lightPrimary,
-                          size: 24,
+                        const Divider(height: 24),
+                        // 2. Esame principale
+                        _buildExamSummaryRow(
+                          number: '2',
+                          examName: widget.displayName,
+                          category: widget.categoryLabel,
+                          time: widget.time,
+                          isPrerequisite: false,
                         ),
-                      ),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.organizationName,
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _formatDateOnly(widget.date),
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                        ),
+                      ] else ...[
+                        // Layout originale per esame singolo
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${widget.categoryLabel} - ${widget.displayName}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    widget.organizationName,
+                                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _formatDate(widget.date),
+                                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: LightModeColors.lightPrimary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.calendar_month,
+                                color: LightModeColors.lightPrimary,
+                                size: 24,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -486,9 +685,11 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
                             width: 20,
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
-                        : const Text(
-                            'Conferma Prenotazione',
-                            style: TextStyle(
+                        : Text(
+                            widget.hasPrerequisite 
+                                ? 'Conferma 2 Prenotazioni' 
+                                : 'Conferma Prenotazione',
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),

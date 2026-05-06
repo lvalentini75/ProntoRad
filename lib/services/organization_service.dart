@@ -85,17 +85,19 @@ class OrganizationService {
   Future<List<Organization>> searchOrganizations({
     String? examId,
     String? packageId,
+    String? country,
     String? region,
     String? province,
     String? city,
   }) async {
     try {
-      debugPrint('[OrgService] 🔍 Searching: exam=$examId, package=$packageId, region=$region, province=$province, city=$city');
+      debugPrint('[OrgService] 🔍 Searching: exam=$examId, package=$packageId, country=$country, region=$region, province=$province, city=$city');
       
       Set<String> orgIds = {};
       
       // 1a. Se c'è un examId, trova le organizzazioni che lo offrono
       if (examId != null) {
+        // Cerca prima in tariffs
         final tariffs = await SupabaseConfig.client
             .from('tariffs')
             .select('organization_id, exam_type_id')
@@ -103,6 +105,42 @@ class OrganizationService {
         
         debugPrint('[OrgService] 📋 Found ${(tariffs as List).length} tariffs for exam $examId');
         orgIds.addAll((tariffs as List).map((t) => t['organization_id'] as String));
+        
+        // Cerca anche in facility_exam_offerings
+        try {
+          // Prima ottieni i facility_id dalle offerte
+          final offerings = await SupabaseConfig.client
+              .from('facility_exam_offerings')
+              .select('facility_id')
+              .eq('exam_type_id', examId)
+              .eq('is_active', true);
+          
+          final facilityIds = (offerings as List)
+              .map((o) => o['facility_id'] as String)
+              .where((id) => id.isNotEmpty)
+              .toSet()
+              .toList();
+          
+          debugPrint('[OrgService] 📋 Found ${facilityIds.length} facilities offering exam $examId');
+          
+          // Poi mappa facility_id -> organization_id
+          if (facilityIds.isNotEmpty) {
+            final facilities = await SupabaseConfig.client
+                .from('facilities')
+                .select('id, organization_id')
+                .inFilter('id', facilityIds);
+            
+            for (final facility in (facilities as List)) {
+              final orgId = facility['organization_id'];
+              if (orgId != null && orgId is String && orgId.isNotEmpty) {
+                orgIds.add(orgId);
+                debugPrint('[OrgService] 🔗 Facility ${facility['id']} → Org $orgId');
+              }
+            }
+          }
+        } catch (offeringError) {
+          debugPrint('[OrgService] ⚠️ Could not query facility_exam_offerings: $offeringError');
+        }
       }
       
       // 1b. Se c'è un packageId, trova le organizzazioni che lo offrono
@@ -117,18 +155,112 @@ class OrganizationService {
         orgIds.addAll((packages as List).map((p) => p['organization_id'] as String));
       }
       
+      // 1c. Cerca anche organizzazioni con slot disponibili per questo esame o categoria
+      if (examId != null) {
+        try {
+          // Cerca slot con examId corrispondente O con categoria corrispondente
+          // Prima, ottieni la categoria dell'esame
+          final examData = await SupabaseConfig.client
+              .from('exam_types')
+              .select('category')
+              .eq('id', examId)
+              .maybeSingle();
+          
+          final examCategory = (examData?['category'] as String?)?.toUpperCase();
+          debugPrint('[OrgService] 📋 Exam category: $examCategory');
+          
+          // DEBUG: Prima vediamo TUTTI gli slot disponibili
+          try {
+            final allSlots = await SupabaseConfig.client
+                .from('availability_slots')
+                .select('id, organization_id, exam_type_id, exam_category, is_active, specific_date')
+                .eq('is_active', true)
+                .limit(20);
+            
+            debugPrint('[OrgService] 🔍 DEBUG - All active slots (first 20):');
+            for (final slot in (allSlots as List)) {
+              final orgId = slot['organization_id'] as String?;
+              // Get org name
+              String orgName = 'Unknown';
+              if (orgId != null) {
+                try {
+                  final org = await SupabaseConfig.client
+                      .from('organizations')
+                      .select('name, country')
+                      .eq('id', orgId)
+                      .maybeSingle();
+                  orgName = '${org?['name']} (${org?['country']})';
+                } catch (_) {}
+              }
+              debugPrint('   📅 Slot: exam_type=${slot['exam_type_id']}, exam_cat=${slot['exam_category']}, date=${slot['specific_date']}, org=$orgName');
+            }
+          } catch (debugErr) {
+            debugPrint('[OrgService] ⚠️ Debug query failed: $debugErr');
+          }
+          
+          // Cerca slot per examId O categoria
+          var slotsQuery = SupabaseConfig.client
+              .from('availability_slots')
+              .select('organization_id')
+              .eq('is_active', true);
+          
+          if (examCategory != null) {
+            // Slot che matchano per examId O per categoria
+            slotsQuery = slotsQuery.or('exam_type_id.eq.$examId,exam_category.eq.$examCategory');
+          } else {
+            slotsQuery = slotsQuery.eq('exam_type_id', examId);
+          }
+          
+          final slotsWithOrg = await slotsQuery;
+          
+          debugPrint('[OrgService] 📋 Slots matching exam/category: ${(slotsWithOrg as List).length}');
+          
+          final slotOrgIds = (slotsWithOrg as List)
+              .map((s) => s['organization_id'] as String?)
+              .where((id) => id != null && id.isNotEmpty)
+              .cast<String>()
+              .toSet();
+          
+          debugPrint('[OrgService] 📋 Found ${slotOrgIds.length} organizations with available slots');
+          for (final oid in slotOrgIds) {
+            debugPrint('   🏥 Org with slots: $oid');
+          }
+          orgIds.addAll(slotOrgIds);
+        } catch (slotError) {
+          debugPrint('[OrgService] ⚠️ Could not query availability_slots: $slotError');
+        }
+      }
+      
       if (orgIds.isEmpty) {
         debugPrint('[OrgService] ❌ No organizations offer this exam/package');
         return [];
       }
       
-      debugPrint('[OrgService] 🏥 Unique organizations: ${orgIds.length}');
+      debugPrint('[OrgService] 🏥 Unique organizations (after all sources): ${orgIds.length}');
       
-      // 2. Filtra per località
+      // 2. Prima carichiamo TUTTE le org per vedere i valori di country
+      final allOrgsDebug = await SupabaseConfig.client
+          .from('organizations')
+          .select('id, name, country, region, province, city')
+          .inFilter('id', orgIds.toList());
+      
+      debugPrint('[OrgService] 🔍 DEBUG - Valori country nelle organizzazioni:');
+      for (final org in (allOrgsDebug as List)) {
+        debugPrint('   🏥 ${org['name']}: country="${org['country']}" region="${org['region']}"');
+      }
+      
+      // 2. Filtra per località e paese
       dynamic query = SupabaseConfig.client
           .from('organizations')
           .select()
           .inFilter('id', orgIds.toList());
+      
+      // Filtro per paese (cruciale per separare Italia/Svizzera)
+      if (country != null && country.isNotEmpty) {
+        // Prova sia con match esatto che case-insensitive
+        query = query.ilike('country', country);
+        debugPrint('[OrgService] 🌍 Filtering by country (ilike): $country');
+      }
       
       if (region != null && region.isNotEmpty) {
         query = query.ilike('region', '%$region%');

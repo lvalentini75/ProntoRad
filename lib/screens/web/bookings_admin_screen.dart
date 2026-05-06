@@ -314,6 +314,7 @@ class _BookingsAdminScreenState extends State<BookingsAdminScreen> {
                     'Ora',
                     'Urgenza',
                     'Stato',
+                    'GFR',
                     'Azioni',
                   ],
                   rows: _filteredBookings.map((booking) => [
@@ -344,6 +345,11 @@ class _BookingsAdminScreenState extends State<BookingsAdminScreen> {
                     ),
                     _UrgencyBadge(urgency: booking.urgencyLevel),
                     _StatusBadge(status: booking.status.name),
+                    _GfrIndicator(
+                      gfrValue: booking.gfrValue,
+                      warningThreshold: booking.organization?.gfrWarningThreshold ?? 60.0,
+                      criticalThreshold: booking.organization?.gfrCriticalThreshold ?? 30.0,
+                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -585,6 +591,16 @@ class _BookingsAdminScreenState extends State<BookingsAdminScreen> {
                                 style: context.textStyles.bodyMedium),
                             ),
                           ],
+                        ),
+                      ],
+                      
+                      // GFR Section (if present)
+                      if (booking.gfrValue != null) ...[
+                        const SizedBox(height: 20),
+                        _GfrDetailSection(
+                          gfrValue: booking.gfrValue!,
+                          warningThreshold: booking.organization?.gfrWarningThreshold ?? 60.0,
+                          criticalThreshold: booking.organization?.gfrCriticalThreshold ?? 30.0,
                         ),
                       ],
                     ],
@@ -864,6 +880,212 @@ class _DetailRow extends StatelessWidget {
           Expanded(
             child: Text(value,
               style: valueStyle ?? context.textStyles.bodyMedium?.semiBold),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Widget indicatore GFR per la tabella
+class _GfrIndicator extends StatelessWidget {
+  final double? gfrValue;
+  final double warningThreshold;
+  final double criticalThreshold;
+
+  const _GfrIndicator({
+    required this.gfrValue,
+    required this.warningThreshold,
+    required this.criticalThreshold,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (gfrValue == null) {
+      return Text('-', style: context.textStyles.bodyMedium?.withColor(Colors.grey));
+    }
+
+    final isCritical = gfrValue! < criticalThreshold;
+    final isWarning = gfrValue! < warningThreshold && !isCritical;
+    
+    if (isCritical) {
+      return Tooltip(
+        message: 'GFR critico: ${gfrValue!.toStringAsFixed(1)} mL/min/1.73m²\nControindicazione per contrasto',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFEF4444), width: 1.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_rounded, size: 16, color: Color(0xFFEF4444)),
+              const SizedBox(width: 6),
+              Text(
+                gfrValue!.toStringAsFixed(1),
+                style: context.textStyles.labelSmall?.semiBold.withColor(const Color(0xFFEF4444)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    if (isWarning) {
+      return Tooltip(
+        message: 'GFR basso: ${gfrValue!.toStringAsFixed(1)} mL/min/1.73m²\nRichiede attenzione',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFF59E0B)),
+              const SizedBox(width: 6),
+              Text(
+                gfrValue!.toStringAsFixed(1),
+                style: context.textStyles.labelSmall?.semiBold.withColor(const Color(0xFFF59E0B)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // GFR normale
+    return Tooltip(
+      message: 'GFR: ${gfrValue!.toStringAsFixed(1)} mL/min/1.73m²',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10B981).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          gfrValue!.toStringAsFixed(1),
+          style: context.textStyles.labelSmall?.semiBold.withColor(const Color(0xFF10B981)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sezione dettaglio GFR nel dialog
+class _GfrDetailSection extends StatelessWidget {
+  final double gfrValue;
+  final double warningThreshold;
+  final double criticalThreshold;
+
+  const _GfrDetailSection({
+    required this.gfrValue,
+    required this.warningThreshold,
+    required this.criticalThreshold,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isCritical = gfrValue < criticalThreshold;
+    final isWarning = gfrValue < warningThreshold && !isCritical;
+    
+    Color iconColor;
+    Color bgColor;
+    String title;
+    String message;
+    IconData icon;
+    
+    if (isCritical) {
+      iconColor = const Color(0xFFEF4444);
+      bgColor = const Color(0xFFEF4444);
+      title = 'GFR Critico ⚠️';
+      message = 'Attenzione: il valore GFR è sotto la soglia critica (${criticalThreshold.toStringAsFixed(0)} mL/min/1.73m²). L\'uso del mezzo di contrasto è controindicato. Consultare il medico.';
+      icon = Icons.error_rounded;
+    } else if (isWarning) {
+      iconColor = const Color(0xFFF59E0B);
+      bgColor = const Color(0xFFF59E0B);
+      title = 'GFR Basso ⚠️';
+      message = 'Il valore GFR è sotto la soglia di warning (${warningThreshold.toStringAsFixed(0)} mL/min/1.73m²). Richiede attenzione e possibili precauzioni per l\'uso del contrasto.';
+      icon = Icons.warning_amber_rounded;
+    } else {
+      iconColor = const Color(0xFF10B981);
+      bgColor = const Color(0xFF10B981);
+      title = 'GFR Normale ✓';
+      message = 'Il valore GFR è nella norma. Nessuna controindicazione per l\'uso del mezzo di contrasto.';
+      icon = Icons.check_circle_rounded;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E242C) : const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: bgColor.withValues(alpha: 0.3),
+          width: 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: bgColor.withValues(alpha: 0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: bgColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Text(title,
+                  style: context.textStyles.titleSmall?.semiBold.withColor(iconColor)),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.science_outlined, size: 18, color: iconColor),
+                    const SizedBox(width: 12),
+                    Text('Valore GFR',
+                      style: context.textStyles.bodySmall?.withColor(Theme.of(context).colorScheme.onSurfaceVariant)),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${gfrValue.toStringAsFixed(1)} mL/min/1.73m²',
+                      style: context.textStyles.titleMedium?.bold.withColor(iconColor),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2A3340) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(message, style: context.textStyles.bodySmall),
+                ),
+              ],
+            ),
           ),
         ],
       ),

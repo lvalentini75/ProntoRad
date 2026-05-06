@@ -415,6 +415,67 @@ export type Database = {
           },
         ]
       }
+      exam_prerequisites: {
+        Row: {
+          created_at: string
+          exam_id: string
+          id: string
+          is_active: boolean
+          is_mandatory: boolean
+          notes: string | null
+          organization_id: string | null
+          prerequisite_exam_id: string
+          time_gap_minutes: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          exam_id: string
+          id?: string
+          is_active?: boolean
+          is_mandatory?: boolean
+          notes?: string | null
+          organization_id?: string | null
+          prerequisite_exam_id: string
+          time_gap_minutes?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          exam_id?: string
+          id?: string
+          is_active?: boolean
+          is_mandatory?: boolean
+          notes?: string | null
+          organization_id?: string | null
+          prerequisite_exam_id?: string
+          time_gap_minutes?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_prerequisites_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "exam_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_prerequisites_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_prerequisites_prerequisite_exam_id_fkey"
+            columns: ["prerequisite_exam_id"]
+            isOneToOne: false
+            referencedRelation: "exam_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exam_types: {
         Row: {
           body_district: string
@@ -620,9 +681,13 @@ export type Database = {
         Row: {
           address: string | null
           city: string | null
+          country: string
           created_at: string
           email: string | null
+          gfr_critical_threshold: number | null
+          gfr_warning_threshold: number | null
           id: string
+          is_active: boolean
           latitude: number | null
           logo_url: string | null
           longitude: number | null
@@ -641,9 +706,13 @@ export type Database = {
         Insert: {
           address?: string | null
           city?: string | null
+          country?: string
           created_at?: string
           email?: string | null
+          gfr_critical_threshold?: number | null
+          gfr_warning_threshold?: number | null
           id?: string
+          is_active?: boolean
           latitude?: number | null
           logo_url?: string | null
           longitude?: number | null
@@ -662,9 +731,13 @@ export type Database = {
         Update: {
           address?: string | null
           city?: string | null
+          country?: string
           created_at?: string
           email?: string | null
+          gfr_critical_threshold?: number | null
+          gfr_warning_threshold?: number | null
           id?: string
+          is_active?: boolean
           latitude?: number | null
           logo_url?: string | null
           longitude?: number | null
@@ -987,6 +1060,17 @@ export type Database = {
         Returns: Json
       }
       current_user_organization_id: { Args: never; Returns: string }
+      debug_user_can_insert_slot: {
+        Args: { check_user_id?: string }
+        Returns: {
+          can_insert: boolean
+          reason: string
+          user_email: string
+          user_id: string
+          user_org_id: string
+          user_role: string
+        }[]
+      }
       delete_facility_exam_offering: {
         Args: { p_offering_id: string }
         Returns: boolean

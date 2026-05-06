@@ -320,6 +320,35 @@ class UserService {
     final user = await getUserByEmail(email);
     return user?.id;
   }
+
+  /// Get all users associated with an organization
+  Future<List<User>> getUsersByOrganization(String organizationId) async {
+    try {
+      final data = await SupabaseConfig.client
+          .from('users')
+          .select()
+          .eq('organization_id', organizationId);
+      return (data as List).map((json) => User.fromJson(json)).toList();
+    } catch (e) {
+      debugPrint('Failed to get users by organization: $e');
+      return [];
+    }
+  }
+
+  /// Get org_admin users for an organization
+  Future<List<User>> getOrgAdmins(String organizationId) async {
+    try {
+      final data = await SupabaseConfig.client
+          .from('users')
+          .select()
+          .eq('organization_id', organizationId)
+          .eq('role', 'org_admin');
+      return (data as List).map((json) => User.fromJson(json)).toList();
+    } catch (e) {
+      debugPrint('Failed to get org admins: $e');
+      return [];
+    }
+  }
   
   /// Create a new end_user with the provided details
   Future<String> createEndUser({
