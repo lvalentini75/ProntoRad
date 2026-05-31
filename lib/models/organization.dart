@@ -32,6 +32,10 @@ class Organization {
   final bool isActive;
   final double gfrWarningThreshold; // GFR below this value shows warning (default: 60)
   final double gfrCriticalThreshold; // GFR below this value shows critical alert (default: 30)
+  // Planning Sale (multi-room calendar) configuration
+  final int planningStartHour; // default 7
+  final int planningEndHour; // default 20
+  final int planningSlotMinutes; // default 15
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -55,6 +59,9 @@ class Organization {
     this.isActive = true,
     this.gfrWarningThreshold = 60.0,
     this.gfrCriticalThreshold = 30.0,
+    this.planningStartHour = 7,
+    this.planningEndHour = 20,
+    this.planningSlotMinutes = 15,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -91,6 +98,9 @@ class Organization {
     if (longitude != null) map['longitude'] = longitude;
     map['gfr_warning_threshold'] = gfrWarningThreshold;
     map['gfr_critical_threshold'] = gfrCriticalThreshold;
+    map['planning_start_hour'] = planningStartHour;
+    map['planning_end_hour'] = planningEndHour;
+    map['planning_slot_minutes'] = planningSlotMinutes;
     
     return map;
   }
@@ -118,6 +128,9 @@ class Organization {
     isActive: json['is_active'] as bool? ?? true,
     gfrWarningThreshold: json['gfr_warning_threshold'] != null ? (json['gfr_warning_threshold'] as num).toDouble() : 60.0,
     gfrCriticalThreshold: json['gfr_critical_threshold'] != null ? (json['gfr_critical_threshold'] as num).toDouble() : 30.0,
+    planningStartHour: (json['planning_start_hour'] as num?)?.toInt() ?? 7,
+    planningEndHour: (json['planning_end_hour'] as num?)?.toInt() ?? 20,
+    planningSlotMinutes: (json['planning_slot_minutes'] as num?)?.toInt() ?? 15,
     createdAt: json['created_at'] != null 
         ? DateTime.parse(json['created_at'] as String) 
         : DateTime.now(),
@@ -146,6 +159,9 @@ class Organization {
     bool? isActive,
     double? gfrWarningThreshold,
     double? gfrCriticalThreshold,
+    int? planningStartHour,
+    int? planningEndHour,
+    int? planningSlotMinutes,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Organization(
@@ -168,6 +184,9 @@ class Organization {
     isActive: isActive ?? this.isActive,
     gfrWarningThreshold: gfrWarningThreshold ?? this.gfrWarningThreshold,
     gfrCriticalThreshold: gfrCriticalThreshold ?? this.gfrCriticalThreshold,
+    planningStartHour: planningStartHour ?? this.planningStartHour,
+    planningEndHour: planningEndHour ?? this.planningEndHour,
+    planningSlotMinutes: planningSlotMinutes ?? this.planningSlotMinutes,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );

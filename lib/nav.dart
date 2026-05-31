@@ -36,6 +36,7 @@ import 'package:xraynow/screens/web/availability_management_screen.dart';
 import 'package:xraynow/screens/web/create_booking_admin_screen.dart';
 import 'package:xraynow/screens/web/exam_packages_screen.dart';
 import 'package:xraynow/screens/web/exam_compatibility_screen.dart';
+import 'package:xraynow/screens/web/planning_rooms_screen.dart';
 import 'package:xraynow/screens/logs_viewer_screen.dart';
 import 'package:xraynow/screens/debug_auth_test_screen.dart';
 import 'package:xraynow/screens/package_selection_screen.dart';
@@ -423,6 +424,13 @@ class AppRouter {
             ),
           ),
           GoRoute(
+            path: AppRoutes.dashboardPlanning,
+            name: 'dashboard-planning',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: PlanningRoomsScreen(),
+            ),
+          ),
+          GoRoute(
             path: AppRoutes.dashboardSettings,
             name: 'dashboard-settings',
             pageBuilder: (context, state) {
@@ -482,6 +490,7 @@ class AppRoutes {
   static const String dashboardAudit = '/dashboard/audit';
   static const String dashboardExamPackages = '/dashboard/exam-packages';
   static const String dashboardExamCompatibility = '/dashboard/exam-compatibility';
+  static const String dashboardPlanning = '/dashboard/planning';
   static const String dashboardSettings = '/dashboard/settings';
   
   // Debug routes

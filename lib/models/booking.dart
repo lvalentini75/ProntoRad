@@ -64,6 +64,7 @@ class Booking {
   final String? examTypeId; // Nullable for package-based bookings
   final String? organizationId; // Primary reference - Organizzazione = Struttura
   final String? facilityId; // Legacy/optional - kept for backwards compatibility
+  final String? roomId; // Optional: assigned room/machine for planning view
   final DateTime bookingDate;
   final DateTime bookingTime;
   final BookingStatus status;
@@ -94,6 +95,7 @@ class Booking {
     this.examTypeId, // Optional for package-based bookings
     this.organizationId,
     this.facilityId,
+    this.roomId,
     required this.bookingDate,
     required this.bookingTime,
     required this.status,
@@ -151,6 +153,9 @@ class Booking {
     if (facilityId != null && facilityId!.isNotEmpty) {
       map['facility_id'] = facilityId;
     }
+    if (roomId != null && roomId!.isNotEmpty) {
+      map['room_id'] = roomId;
+    }
     // Include slot_id only if not empty - exclude if empty string
     if (slotId != null && slotId!.isNotEmpty) {
       map['slot_id'] = slotId;
@@ -194,6 +199,7 @@ class Booking {
       examTypeId: json['exam_type_id']?.toString(), // Nullable for package bookings
       organizationId: json['organization_id']?.toString(),
       facilityId: json['facility_id']?.toString(),
+      roomId: json['room_id']?.toString(),
       bookingDate: parseDateTime(json['booking_date'], now),
       bookingTime: parseDateTime(json['booking_time'], now),
       status: BookingStatus.values.firstWhere((e) => e.name == json['status'], orElse: () => BookingStatus.requested),
@@ -221,6 +227,7 @@ class Booking {
     String? examTypeId,
     String? organizationId,
     String? facilityId,
+    String? roomId,
     DateTime? bookingDate,
     DateTime? bookingTime,
     BookingStatus? status,
@@ -249,6 +256,7 @@ class Booking {
     examTypeId: examTypeId ?? this.examTypeId,
     organizationId: organizationId ?? this.organizationId,
     facilityId: facilityId ?? this.facilityId,
+    roomId: roomId ?? this.roomId,
     bookingDate: bookingDate ?? this.bookingDate,
     bookingTime: bookingTime ?? this.bookingTime,
     status: status ?? this.status,

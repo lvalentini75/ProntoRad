@@ -169,7 +169,7 @@ class DashboardSidebar extends StatelessWidget {
         _NavGroup(title: 'Esami Multipli', children: [
           _NavItem(
             icon: Icons.inventory_2_rounded,
-            label: 'Pacchetti Esami',
+            label: 'Esami Multipli',
             route: '/dashboard/exam-packages',
             isActive: currentPath == '/dashboard/exam-packages',
           ),
@@ -205,6 +205,12 @@ class DashboardSidebar extends StatelessWidget {
             label: 'Confermate',
             route: '/dashboard/bookings/confirmed',
             isActive: currentPath == '/dashboard/bookings/confirmed',
+          ),
+          _NavItem(
+            icon: Icons.calendar_view_day_rounded,
+            label: 'Planning Sale',
+            route: '/dashboard/planning',
+            isActive: currentPath == '/dashboard/planning',
           ),
         ]),
         const SizedBox(height: 8),
@@ -261,6 +267,12 @@ class DashboardSidebar extends StatelessWidget {
             route: '/dashboard/bookings/confirmed',
             isActive: currentPath == '/dashboard/bookings/confirmed',
           ),
+          _NavItem(
+            icon: Icons.calendar_view_day_rounded,
+            label: 'Planning Sale',
+            route: '/dashboard/planning',
+            isActive: currentPath == '/dashboard/planning',
+          ),
         ]),
         const SizedBox(height: 8),
         _NavGroup(title: 'Gestione', children: [
@@ -287,7 +299,7 @@ class DashboardSidebar extends StatelessWidget {
         _NavGroup(title: 'Esami Multipli', children: [
           _NavItem(
             icon: Icons.inventory_2_rounded,
-            label: 'Pacchetti Esami',
+            label: 'Esami Multipli',
             route: '/dashboard/exam-packages',
             isActive: currentPath == '/dashboard/exam-packages',
           ),

@@ -31,6 +31,7 @@ class AvailabilitySlot {
   final int? maxBookings; // default 1
   final bool? isActive; // alias DB di isAvailable
   final String? notes;
+  final String? roomId; // Optional: associated room/machine
 
   AvailabilitySlot({
     required this.id,
@@ -50,6 +51,7 @@ class AvailabilitySlot {
     this.maxBookings,
     this.isActive,
     this.notes,
+    this.roomId,
   }) {
     // Warning se entrambi sono null, ma non blocchiamo (potrebbe essere uno slot legacy)
     if (examId == null && examCategory == null) {
@@ -119,6 +121,9 @@ class AvailabilitySlot {
     if (notes != null && notes!.isNotEmpty) {
       map['notes'] = notes;
     }
+    if (roomId != null && roomId!.isNotEmpty) {
+      map['room_id'] = roomId;
+    }
     
     return map;
   }
@@ -180,6 +185,7 @@ class AvailabilitySlot {
       maxBookings: json['max_bookings'] as int?,
       isActive: json['is_active'] as bool?,
       notes: json['notes'] as String?,
+      roomId: json['room_id'] as String?,
     );
   }
 
@@ -209,6 +215,7 @@ class AvailabilitySlot {
     int? maxBookings,
     bool? isActive,
     String? notes,
+    String? roomId,
   }) => AvailabilitySlot(
     id: id ?? this.id,
     facilityId: facilityId ?? this.facilityId,
@@ -227,5 +234,6 @@ class AvailabilitySlot {
     maxBookings: maxBookings ?? this.maxBookings,
     isActive: isActive ?? this.isActive,
     notes: notes ?? this.notes,
+    roomId: roomId ?? this.roomId,
   );
 }

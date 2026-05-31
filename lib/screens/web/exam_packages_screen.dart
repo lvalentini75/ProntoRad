@@ -9,7 +9,7 @@ import 'package:xraynow/services/exam_package_service.dart';
 import 'package:xraynow/services/exam_service.dart';
 import 'package:xraynow/theme.dart';
 
-/// Schermata gestione pacchetti esami
+/// Schermata gestione esami multipli
 class ExamPackagesScreen extends StatefulWidget {
   const ExamPackagesScreen({super.key});
 
@@ -100,7 +100,7 @@ class _ExamPackagesScreenState extends State<ExamPackagesScreen> {
         await _loadData();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(existing != null ? 'Pacchetto aggiornato' : 'Pacchetto creato')),
+            SnackBar(content: Text(existing != null ? 'Esame multiplo aggiornato' : 'Esame multiplo creato')),
           );
         }
       } catch (e) {
@@ -118,7 +118,7 @@ class _ExamPackagesScreenState extends State<ExamPackagesScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Conferma eliminazione'),
-        content: Text('Eliminare il pacchetto "${package.name}"?'),
+        content: Text('Eliminare l\'esame multiplo "${package.name}"?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
           FilledButton(
@@ -137,7 +137,7 @@ class _ExamPackagesScreenState extends State<ExamPackagesScreen> {
         await _loadData();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Pacchetto eliminato')),
+            const SnackBar(content: Text('Esame multiplo eliminato')),
           );
         }
       }
@@ -231,9 +231,9 @@ class _ExamPackagesScreenState extends State<ExamPackagesScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Pacchetti Esami', style: context.textStyles.titleLarge?.bold),
+                                Text('Esami Multipli', style: context.textStyles.titleLarge?.bold),
                                 Text(
-                                  'Gestisci pacchetti di esami predefiniti per prenotazioni multiple',
+                                  'Gestisci esami multipli predefiniti per prenotazioni multiple',
                                   style: context.textStyles.bodySmall?.withColor(colorScheme.onSurfaceVariant),
                                 ),
                               ],
@@ -254,7 +254,7 @@ class _ExamPackagesScreenState extends State<ExamPackagesScreen> {
                           FilledButton.icon(
                             onPressed: () => _showPackageDialog(),
                             icon: const Icon(Icons.add, size: 18),
-                            label: const Text('Nuovo Pacchetto'),
+                            label: const Text('Nuovo Esame Multiplo'),
                           ),
                         ],
                       ),
@@ -269,10 +269,10 @@ class _ExamPackagesScreenState extends State<ExamPackagesScreen> {
                                 children: [
                                   Icon(Icons.inventory_2_outlined, size: 64, color: colorScheme.outline),
                                   const SizedBox(height: 16),
-                                  Text('Nessun pacchetto configurato', style: context.textStyles.titleMedium),
+                                  Text('Nessun esame multiplo configurato', style: context.textStyles.titleMedium),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Crea pacchetti per combinare più esami in una singola prenotazione',
+                                    'Crea esami multipli per combinare più esami in una singola prenotazione',
                                     style: context.textStyles.bodyMedium?.withColor(colorScheme.onSurfaceVariant),
                                   ),
                                 ],
@@ -550,7 +550,7 @@ class _ExamPackageDialogState extends State<ExamPackageDialog> {
         children: [
           Icon(Icons.inventory_2, color: colorScheme.primary),
           const SizedBox(width: 8),
-          Text(widget.existing != null ? 'Modifica Pacchetto' : 'Nuovo Pacchetto'),
+          Text(widget.existing != null ? 'Modifica Esame Multiplo' : 'Nuovo Esame Multiplo'),
         ],
       ),
       content: SizedBox(
@@ -565,7 +565,7 @@ class _ExamPackageDialogState extends State<ExamPackageDialog> {
                 TextFormField(
                   controller: _nameCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Nome pacchetto *',
+                    labelText: 'Nome esame multiplo *',
                     hintText: 'Es: RM Colonna Completa',
                   ),
                   validator: (v) => v?.isEmpty ?? true ? 'Campo obbligatorio' : null,
@@ -575,7 +575,7 @@ class _ExamPackageDialogState extends State<ExamPackageDialog> {
                   controller: _descriptionCtrl,
                   decoration: const InputDecoration(
                     labelText: 'Descrizione',
-                    hintText: 'Descrizione opzionale del pacchetto',
+                    hintText: 'Descrizione opzionale dell\'esame multiplo',
                   ),
                   maxLines: 2,
                 ),
@@ -645,7 +645,7 @@ class _ExamPackageDialogState extends State<ExamPackageDialog> {
                       child: TextFormField(
                         controller: _priceCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'Prezzo pacchetto (€)',
+                          labelText: 'Prezzo esame (€)',
                           hintText: 'Opzionale',
                         ),
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),

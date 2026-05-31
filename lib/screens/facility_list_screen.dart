@@ -14,6 +14,8 @@ import 'package:xraynow/services/tariff_service.dart';
 import 'package:xraynow/services/availability_service.dart';
 import 'package:xraynow/services/exam_service.dart';
 import 'package:xraynow/services/exam_prerequisite_service.dart';
+import 'package:xraynow/services/exam_package_service.dart';
+import 'package:xraynow/models/exam_compatibility.dart';
 import 'package:xraynow/theme.dart';
 
 /// Dati aggregati per mostrare un'organizzazione con prezzo e disponibilità
@@ -665,6 +667,7 @@ class _TimeSlotSheetState extends State<TimeSlotSheet> {
   final AvailabilityService _availabilityService = AvailabilityService();
   final ExamService _examService = ExamService();
   final ExamPrerequisiteService _prerequisiteService = ExamPrerequisiteService();
+  final ExamPackageService _examPackageService = ExamPackageService();
 
   DateTime? _selectedDate;
   AvailabilitySlot? _selectedSlot;
@@ -683,6 +686,10 @@ class _TimeSlotSheetState extends State<TimeSlotSheet> {
   AvailabilitySlot? _prerequisiteSlot;
   ExamType? _prerequisiteExam;
   bool _loadingPrerequisites = false;
+  
+  // Regole di compatibilità per verificare "sale diverse"
+  List<ExamCompatibility> _compatibilityRules = [];
+  bool _hasDifferentRoomWarning = false;
 
   @override
   void initState() {
@@ -724,10 +731,17 @@ class _TimeSlotSheetState extends State<TimeSlotSheet> {
     try {
       setState(() => _loadingPrerequisites = true);
       
-      final prereqs = await _prerequisiteService.getPrerequisitesForExam(
-        widget.exam!.id,
-        organizationId: widget.organization.id,
-      );
+      // Carica prerequisiti e compatibilità in parallelo
+      final results = await Future.wait([
+        _prerequisiteService.getPrerequisitesForExam(
+          widget.exam!.id,
+          organizationId: widget.organization.id,
+        ),
+        _examPackageService.getActiveCompatibilityRules(widget.organization.id),
+      ]);
+      
+      final prereqs = results[0] as List<ExamPrerequisite>;
+      final compatRules = results[1] as List<ExamCompatibility>;
       
       // Filtra solo quelli obbligatori e attivi
       final mandatory = prereqs.where((p) => p.isMandatory && p.isActive).toList();
@@ -735,6 +749,7 @@ class _TimeSlotSheetState extends State<TimeSlotSheet> {
       if (mounted) {
         setState(() {
           _mandatoryPrerequisites = mandatory;
+          _compatibilityRules = compatRules;
           _loadingPrerequisites = false;
         });
       }
@@ -745,11 +760,31 @@ class _TimeSlotSheetState extends State<TimeSlotSheet> {
           final prereqName = _examCache[p.prerequisiteExamId]?.name ?? p.prerequisiteExamId;
           debugPrint('[TimeSlotSheet]   - $prereqName (${p.timeGapMinutes} min prima)');
         }
+        debugPrint('[TimeSlotSheet] 📋 Caricate ${compatRules.length} regole di compatibilità');
       }
     } catch (e) {
       debugPrint('[TimeSlotSheet] ⚠️ Errore caricamento prerequisiti: $e');
       if (mounted) setState(() => _loadingPrerequisites = false);
     }
+  }
+  
+  /// Verifica se l'esame prerequisito e l'esame principale si svolgono in sale diverse
+  bool _checkDifferentRoomWarning() {
+    if (widget.exam == null || _mandatoryPrerequisites.isEmpty) return false;
+    
+    for (final prereq in _mandatoryPrerequisites) {
+      // Cerca una regola di compatibilità tra i due esami
+      for (final rule in _compatibilityRules) {
+        final involvesExam = rule.examId1 == widget.exam!.id || rule.examId2 == widget.exam!.id;
+        final involvesPrereq = rule.examId1 == prereq.prerequisiteExamId || rule.examId2 == prereq.prerequisiteExamId;
+        
+        if (involvesExam && involvesPrereq && rule.compatibilityType == CompatibilityType.differentRoom) {
+          debugPrint('[TimeSlotSheet] 🏥 Sale diverse rilevate tra ${widget.exam!.name} e prerequisito');
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   @override
@@ -1118,6 +1153,33 @@ class _TimeSlotSheetState extends State<TimeSlotSheet> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
+                // Avviso sale diverse
+                if (_checkDifferentRoomWarning())
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.meeting_room_outlined, color: Colors.orange.shade700, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Attenzione: gli esami si svolgono in sale diverse',
+                            style: TextStyle(
+                              color: Colors.orange.shade800,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 16),
               ],
               

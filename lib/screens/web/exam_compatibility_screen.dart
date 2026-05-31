@@ -138,7 +138,7 @@ class _ExamCompatibilityScreenState extends State<ExamCompatibilityScreen> with 
                             tabs: [
                               Tab(
                                 icon: const Icon(Icons.compare_arrows, size: 20),
-                                text: 'Compatibilità (${_compatibilityRules.length})',
+                                text: 'Relazione (${_compatibilityRules.length})',
                               ),
                               Tab(
                                 icon: const Icon(Icons.arrow_forward, size: 20),
